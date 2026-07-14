@@ -1,0 +1,140 @@
+import { notFound } from "next/navigation";
+import { closeOpportunityAction, recordSaleAction } from "@/app/actions";
+import { getFormOptions, getOpportunity } from "@/lib/data";
+import { dateInputValue, displayStatus, formatCreditBasisPoints } from "@/lib/format";
+import { canManage } from "@/lib/roles";
+import { displayClientSession } from "@/lib/session-options";
+import { getCurrentRole } from "@/lib/session";
+
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function OpportunityDetailPage({ params, searchParams }: PageProps) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const [opportunity, options, role] = await Promise.all([getOpportunity(id), getFormOptions(), getCurrentRole()]);
+  if (!opportunity) {
+    notFound();
+  }
+
+  const error = scalar(query.error);
+  const canClose = canManage(role);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="page-title">{opportunity.client.firstName} {opportunity.client.lastName}</h1>
+        <p className="text-[var(--text-muted)]">{opportunity.location.name} - {opportunity.client.phoneDisplay}</p>
+      </div>
+      {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <div className="card p-4">
+          <h2 className="section-title mb-3">Client Information</h2>
+          <dl className="space-y-2 text-sm">
+            <Row label="First visit" value={dateInputValue(opportunity.client.firstVisitDate)} />
+            <Row label="Session" value={displayClientSession(opportunity.client.sessionType, opportunity.client.sessionOther)} />
+            <Row label="Client type" value={opportunity.client.clientType ?? "-"} />
+            <Row label="Primary issue" value={opportunity.client.primaryIssue ?? "-"} />
+            <Row label="Therapist" value={opportunity.firstVisitTherapist?.displayName ?? "-"} />
+            <Row label="Interest level" value={opportunity.interestLevel} />
+            <Row label="Email" value={opportunity.client.email ?? "-"} />
+            <Row label="Status" value={displayStatus(opportunity.status)} />
+            <Row label="Primary" value={opportunity.proposedPrimaryCloser.displayName} />
+            <Row label="Support" value={opportunity.proposedSupportCloser?.displayName ?? "-"} />
+            <Row label="Follow-up" value={displayStatus(opportunity.followUpStatus)} />
+          </dl>
+        </div>
+
+        <div className="card p-4 lg:col-span-2">
+          <h2 className="section-title mb-3">Membership Sale</h2>
+          {opportunity.sale ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <Row label="Sale date" value={dateInputValue(opportunity.sale.membershipSaleDate)} />
+              <Row label="Membership type" value={opportunity.sale.membershipType.name} />
+              <Row label="Primary closer" value={opportunity.sale.finalPrimaryCloser.displayName} />
+              <Row label="Support closer" value={opportunity.sale.finalSupportCloser?.displayName ?? "-"} />
+              <Row label="First-visit sale" value={opportunity.sale.isFirstVisitSale ? "Yes" : "No"} />
+              <Row label="Approval" value={displayStatus(opportunity.sale.approvalStatus)} />
+              <div className="md:col-span-2">
+                <p className="mb-1 text-sm font-semibold text-[var(--text-muted)]">Credits</p>
+                <div className="flex flex-wrap gap-2">
+                  {opportunity.sale.credits.map((credit) => (
+                    <span key={credit.id} className="badge badge-teal">
+                      {credit.staff.displayName}: {formatCreditBasisPoints(credit.creditBasisPoints)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <form action={recordSaleAction} className="grid gap-3 md:grid-cols-2">
+              <input type="hidden" name="opportunityId" value={opportunity.id} />
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold">Membership sale date</span>
+                <input className="field" type="date" name="membershipSaleDate" defaultValue={dateInputValue(new Date())} required />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold">Membership type</span>
+                <select className="field" name="membershipTypeId" required>
+                  {options.membershipTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold">Final primary closer</span>
+                <select className="field" name="finalPrimaryCloserId" defaultValue={opportunity.proposedPrimaryCloserId} required>
+                  {options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold">Final support closer</span>
+                <select className="field" name="finalSupportCloserId" defaultValue={opportunity.proposedSupportCloserId ?? ""}>
+                  <option value="">None</option>
+                  {options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-sm font-semibold">Sale notes</span>
+                <textarea className="field min-h-24" name="notes" />
+              </label>
+              <div className="md:col-span-2">
+                <button className="button-accent" type="submit">Record membership sale</button>
+              </div>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {canClose && !opportunity.sale ? (
+        <section className="card p-4">
+          <h2 className="section-title mb-3">Close Without Sale</h2>
+          <form action={closeOpportunityAction} className="grid gap-3 md:grid-cols-[1fr_2fr_auto]">
+            <input type="hidden" name="opportunityId" value={opportunity.id} />
+            <select className="field" name="closureReason" required>
+              <option value="">Closure reason</option>
+              {["CLIENT_DECLINED", "UNABLE_TO_REACH", "NOT_A_GOOD_FIT", "DUPLICATE_RECORD", "MEMBERSHIP_ALREADY_ACTIVE", "INVALID_ENTRY", "OTHER"].map((reason) => (
+                <option key={reason} value={reason}>{displayStatus(reason)}</option>
+              ))}
+            </select>
+            <input className="field" name="closureNote" placeholder="Optional note" />
+            <button className="button-danger" type="submit">Close opportunity</button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-sm font-semibold text-[var(--text-muted)]">{label}</dt>
+      <dd className="font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function scalar(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
