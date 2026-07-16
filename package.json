@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "docker:start": "prisma migrate deploy && next start",
+    "docker:seed": "prisma migrate deploy && npm run db:seed",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",

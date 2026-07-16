@@ -20,6 +20,25 @@ npm run dev -- --hostname 0.0.0.0
 
 Open the local or network URL printed by Next.js.
 
+## Docker
+
+Docker is set up for production-style hosting with SQLite stored in a persistent `/app/data` volume.
+
+Build and start locally:
+
+```bash
+docker compose up --build
+```
+
+For a brand-new Docker volume, seed the initial local users once:
+
+```bash
+docker compose run --rm commission-program npm run docker:seed
+docker compose up
+```
+
+The container runs `prisma migrate deploy` before `next start`. Keep `DATABASE_URL="file:/app/data/prod.db"` and mount `/app/data` as persistent storage so SQLite data survives container rebuilds.
+
 ## Local Users
 
 The app uses local username/password login before loading protected dashboard views.
@@ -48,6 +67,8 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 ## Database
 
 SQLite is stored at `prisma/dev.db` when `DATABASE_URL="file:./dev.db"`.
+
+In Docker, SQLite is stored at `/app/data/prod.db` by default. The `docker-compose.yml` file mounts this path as the named volume `commission-program-data`.
 
 Reset and reseed:
 

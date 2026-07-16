@@ -20,6 +20,7 @@ Latest in-progress flow: Dashboard and opportunity workflow updates for the acti
 - Add First Time Client validation now uses client-side checks plus `useActionState` server errors so rejected fields beep, show inline errors, and do not clear entered data.
 - Administration includes editable CRM Step templates for Initial Text Message, Final Text Message, Initial Email, Final Email, and Initial Voice Script. Each template opens for editing only after tapping that action.
 - Administration sections are collapsed by default and each panel opens/closes independently from its title row.
+- Docker support is staged with `Dockerfile`, `.dockerignore`, and `docker-compose.yml`; the container runs `prisma migrate deploy` before `next start` and uses `/app/data/prod.db` for persistent SQLite.
 - Month-End and Admin are administrator-only in navigation and direct page access.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.
@@ -47,6 +48,9 @@ Previous implemented flow: Add First Time Client has two submit paths.
 - `src/app/opportunities/[id]/next-action-card.tsx`
 - `src/lib/client-form-state.ts`
 - `src/lib/crm-steps.ts`
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.yml`
 - `src/lib/session-options.ts`
 - `prisma/schema.prisma`
 - `prisma/migrations/20260716133000_add_crm_step_templates/migration.sql`
@@ -88,10 +92,12 @@ npm run lint
 npm run build
 npx prisma migrate dev
 npm run db:seed
+docker compose up --build
+docker compose run --rm commission-program npm run docker:seed
 ```
 
 ## Next Steps
 
 - Manually test the full Add First Time Client flow on the target device.
 - Decide whether Sold Membership should always award full first-visit credit immediately, even when support closer is selected, or keep split approval.
-- Make an initial git commit once the current untracked project state is acceptable.
+- Create a GitHub repository and push `main` when ready for remote backup and Docker hosting work.
