@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { createSaleCredits, isFirstVisitSale } from "../src/lib/commission";
 import { getPrisma } from "../src/lib/db";
+import { crmStepTemplates } from "../src/lib/crm-steps";
 import { normalizePhone, toLocalDate } from "../src/lib/format";
 import { hashPassword } from "../src/lib/passwords";
 
@@ -15,6 +16,7 @@ async function main() {
   await prisma.followUp.deleteMany();
   await prisma.membershipOpportunity.deleteMany();
   await prisma.client.deleteMany();
+  await prisma.crmStepTemplate.deleteMany();
   await prisma.commissionSetting.deleteMany();
   await prisma.membershipType.deleteMany();
   await prisma.location.deleteMany();
@@ -94,6 +96,15 @@ async function main() {
     prisma.commissionSetting.create({ data: { key: "supportSplitBasisPoints", label: "Support split percentage", value: "3000" } }),
   ]);
 
+  await prisma.crmStepTemplate.createMany({
+    data: crmStepTemplates.map((template) => ({
+      key: template.key,
+      label: template.label,
+      content: template.defaultContent,
+      sortOrder: template.sortOrder,
+    })),
+  });
+
   async function createOpportunity(input: {
     firstName: string;
     lastName: string;
@@ -136,7 +147,7 @@ async function main() {
         proposedSupportCloserId: input.support ? staff[input.support].id : null,
         status: input.status ?? "OPEN",
         closureReason: input.closureReason,
-        followUpStatus: "FOLLOW_UP_NEEDED",
+        followUpStatus: "Follow Up Needed",
       },
     });
     if (!input.saleDate) {
@@ -153,7 +164,7 @@ async function main() {
         membershipTypeId: membershipTypes[0].id,
         finalPrimaryCloserId: staff[input.salePrimary ?? input.primary].id,
         finalSupportCloserId: finalSupport?.id,
-        approvalStatus: input.approvalStatus ?? (finalSupport ? "PENDING_SPLIT_APPROVAL" : "APPROVED"),
+        approvalStatus: input.approvalStatus ?? "PENDING",
         isFirstVisitSale: firstVisit,
       },
     });
@@ -170,7 +181,7 @@ async function main() {
   }
 
   await createOpportunity({ firstName: "Ari", lastName: "Nguyen", phone: "(858) 555-1201", firstVisitDate: "2026-07-01", locationCode: "SV", primary: "Abbott", saleDate: "2026-07-01" });
-  await createOpportunity({ firstName: "Mina", lastName: "Patel", phone: "858.555.1202", firstVisitDate: "2026-07-03", locationCode: "RB", primary: "Betsy", support: "Dennis", saleDate: "2026-07-08", salePrimary: "Betsy", saleSupport: "Dennis", approvalStatus: "APPROVED" });
+  await createOpportunity({ firstName: "Mina", lastName: "Patel", phone: "858.555.1202", firstVisitDate: "2026-07-03", locationCode: "RB", primary: "Betsy", support: "Dennis", saleDate: "2026-07-08", salePrimary: "Betsy", saleSupport: "Dennis" });
   await createOpportunity({ firstName: "Jon", lastName: "Reed", phone: "858-555-1203", firstVisitDate: "2026-07-06", locationCode: "DT", primary: "Dennis" });
   await createOpportunity({ firstName: "Lena", lastName: "Moss", phone: "858-555-1204", firstVisitDate: "2026-07-07", locationCode: "SV", primary: "Walter", support: "Abbott" });
   await createOpportunity({ firstName: "Chris", lastName: "Stone", phone: "858-555-1205", firstVisitDate: "2026-06-18", locationCode: "RB", primary: "Abbott", status: "CLOSED_NO_SALE", closureReason: "CLIENT_DECLINED" });

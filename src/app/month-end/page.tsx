@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { approveSplitAction, finalizeMonthAction, reopenMonthAction } from "@/app/actions";
 import { getMonthEndData } from "@/lib/data";
 import { formatCreditBasisPoints, formatMoney, monthKey } from "@/lib/format";
-import { canAdmin, canManage } from "@/lib/roles";
+import { canAdmin } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 
 type PageProps = {
@@ -12,7 +13,11 @@ type PageProps = {
 export default async function MonthEndPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const month = scalar(params.month) ?? monthKey();
-  const [data, role] = await Promise.all([getMonthEndData(month), getCurrentRole()]);
+  const role = await getCurrentRole();
+  if (!canAdmin(role)) {
+    redirect("/");
+  }
+  const data = await getMonthEndData(month);
   const error = scalar(params.error);
   const isFinalized = data.period?.status === "FINALIZED";
 
@@ -21,7 +26,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="page-title">Month-End Review</h1>
-          <p className="text-[var(--text-muted)]">Resolve exceptions, approve split sales, finalize, and export commission results.</p>
+          <p className="text-[var(--text-muted)]">Resolve exceptions, approve pending sales, finalize, and export commission results.</p>
         </div>
         {isFinalized ? <Link className="button-secondary" href={`/month-end/export/${month}`}>Export CSV</Link> : null}
       </div>
@@ -37,28 +42,30 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
       </form>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <ExceptionCard label="Pending split approvals" value={data.pendingSplits.length} />
+        <ExceptionCard label="Pending approvals" value={data.pendingSplits.length} />
         <ExceptionCard label="Disputed records" value={data.disputes.length} />
         <ExceptionCard label="Invalid records" value={data.invalids.length} />
       </section>
 
       <section className="card p-4">
-        <h2 className="section-title mb-3">Pending Splits</h2>
+        <h2 className="section-title mb-3">Pending Sales</h2>
         <div className="space-y-3">
           {data.pendingSplits.map((sale) => (
             <form key={sale.id} action={approveSplitAction} className="flex flex-col gap-2 border-b border-[var(--border)] pb-3 md:flex-row md:items-center md:justify-between">
               <input type="hidden" name="saleId" value={sale.id} />
               <div>
                 <p className="font-semibold">{sale.opportunity.client.firstName} {sale.opportunity.client.lastName}</p>
-                <p className="text-sm text-[var(--text-muted)]">{sale.finalPrimaryCloser.displayName} 70% / {sale.finalSupportCloser?.displayName ?? "Support"} 30%</p>
+                <p className="text-sm text-[var(--text-muted)]">
+                  {sale.finalSupportCloser ? `${sale.finalPrimaryCloser.displayName} 70% / ${sale.finalSupportCloser.displayName} 30%` : `${sale.finalPrimaryCloser.displayName} 100%`}
+                </p>
               </div>
               <div className="flex gap-2">
-                <button className="button-primary" name="approval" value="APPROVED" disabled={!canManage(role)}>Approve</button>
-                <button className="button-danger" name="approval" value="REJECTED" disabled={!canManage(role)}>Reject</button>
+                <button className="button-primary" name="approval" value="APPROVED">Approve</button>
+                <button className="button-danger" name="approval" value="REJECTED">Reject</button>
               </div>
             </form>
           ))}
-          {data.pendingSplits.length === 0 ? <p className="text-[var(--text-muted)]">No pending split approvals.</p> : null}
+          {data.pendingSplits.length === 0 ? <p className="text-[var(--text-muted)]">No pending sales.</p> : null}
         </div>
       </section>
 
@@ -94,7 +101,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
           {!isFinalized ? (
             <form action={finalizeMonthAction}>
               <input type="hidden" name="month" value={month} />
-              <button className="button-accent" disabled={!canManage(role)}>Finalize month</button>
+              <button className="button-accent">Finalize month</button>
             </form>
           ) : (
             <form action={reopenMonthAction}>

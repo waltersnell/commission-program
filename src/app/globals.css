@@ -67,6 +67,11 @@ a {
   color: var(--charcoal);
 }
 
+.field[aria-invalid="true"] {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px rgba(200, 102, 36, 0.14);
+}
+
 .button-primary,
 .button-secondary,
 .button-accent,

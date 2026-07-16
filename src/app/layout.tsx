@@ -18,6 +18,9 @@ const navItems = [
   ["Opportunities", "/opportunities"],
   ["Sales", "/sales"],
   ["Commissions", "/commissions"],
+];
+
+const adminNavItems = [
   ["Month-End", "/month-end"],
   ["Admin", "/admin"],
 ];
@@ -60,7 +63,7 @@ export default async function RootLayout({
               </form>
             </div>
             <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-3">
-              {navItems.map(([label, href]) => (
+              {[...navItems, ...(user?.role === "ADMINISTRATOR" ? adminNavItems : [])].map(([label, href]) => (
                 <Link key={href} href={href} className="nav-link">
                   {label}
                 </Link>

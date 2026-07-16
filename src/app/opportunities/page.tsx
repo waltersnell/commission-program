@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { getFormOptions, getOpportunities } from "@/lib/data";
-import { dateInputValue, displayStatus } from "@/lib/format";
+import { dateInputValue } from "@/lib/format";
+import { canAdmin } from "@/lib/roles";
+import { getCurrentUser } from "@/lib/session";
+import { findStaffForUser } from "@/lib/current-staff";
+import { getOpportunityNextAction } from "@/lib/opportunity-next-action";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -8,8 +12,11 @@ type PageProps = {
 
 export default async function OpportunitiesPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  const user = await getCurrentUser();
+  const isAdmin = canAdmin(user?.role ?? "");
+  const visibleStaff = isAdmin ? null : await findStaffForUser(user);
   const [{ rows, total, page, pageCount }, { locations, staff }] = await Promise.all([
-    getOpportunities(params),
+    getOpportunities(params, isAdmin ? null : visibleStaff?.id ?? "__no_matching_staff__"),
     getFormOptions(),
   ]);
 
@@ -18,31 +25,29 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="page-title">Open Opportunities</h1>
-          <p className="text-[var(--text-muted)]">{total} matching client opportunities. Default page size is 25.</p>
+          <p className="text-[var(--text-muted)]">
+            {total} {isAdmin ? "matching client opportunities" : "open opportunities assigned to you"}. Default page size is 25.
+          </p>
         </div>
         <Link href="/clients/new" className="button-accent">
           Add client
         </Link>
       </div>
 
-      <form className="card grid gap-3 p-4 md:grid-cols-5">
-        <input className="field" name="search" placeholder="Search name or phone" defaultValue={scalar(params.search) ?? ""} />
-        <select className="field" name="status" defaultValue={scalar(params.status) ?? ""}>
-          <option value="">All statuses</option>
-          {["OPEN", "MEMBERSHIP_SOLD", "CLOSED_NO_SALE", "INVALID", "DISPUTED"].map((status) => (
-            <option key={status} value={status}>{displayStatus(status)}</option>
-          ))}
-        </select>
-        <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
-          <option value="">All locations</option>
-          {locations.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}
-        </select>
-        <select className="field" name="closerId" defaultValue={scalar(params.closerId) ?? ""}>
-          <option value="">All closers</option>
-          {staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
-        </select>
-        <button className="button-primary" type="submit">Filter</button>
-      </form>
+      {isAdmin ? (
+        <form className="card grid gap-3 p-4 md:grid-cols-4">
+          <input className="field" name="search" placeholder="Search name or phone" defaultValue={scalar(params.search) ?? ""} />
+          <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
+            <option value="">All locations</option>
+            {locations.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}
+          </select>
+          <select className="field" name="closerId" defaultValue={scalar(params.closerId) ?? ""}>
+            <option value="">All closers</option>
+            {staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+          </select>
+          <button className="button-primary" type="submit">Filter</button>
+        </form>
+      ) : null}
 
       <section className="card p-4">
         <div className="table-wrap">
@@ -72,7 +77,14 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
                     <td>{opportunity.proposedPrimaryCloser.displayName}</td>
                     <td>{opportunity.daysOpen}</td>
                     <td><InterestBadge level={opportunity.interestLevel} /></td>
-                    <td>{displayStatus(opportunity.followUpStatus)}</td>
+                    <td>
+                      <NextAction
+                        level={opportunity.interestLevel}
+                        firstVisitDate={opportunity.client.firstVisitDate}
+                        followUpStatus={opportunity.followUpStatus}
+                        nextFollowUpDate={opportunity.nextFollowUpDate}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -92,9 +104,38 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
   );
 }
 
+
 function InterestBadge({ level }: { level: string }) {
   const className = level === "Hot" ? "badge-orange" : level === "Warm" ? "badge-teal" : "badge-gray";
   return <span className={`badge ${className}`}>{level}</span>;
+}
+
+function NextAction({
+  level,
+  firstVisitDate,
+  followUpStatus,
+  nextFollowUpDate,
+}: {
+  level: string;
+  firstVisitDate: Date;
+  followUpStatus?: string | null;
+  nextFollowUpDate?: Date | null;
+}) {
+  const action = getOpportunityNextAction({ interestLevel: level, firstVisitDate, followUpStatus, nextFollowUpDate });
+  if (!action) {
+    return "-";
+  }
+
+  return (
+    <div className="grid gap-1">
+      <span className="font-semibold">{action.label}</span>
+      {action.dueDate ? (
+        <span className={action.isLate ? "font-semibold text-[var(--orange)]" : "text-[var(--text-muted)]"}>
+          Due {dateInputValue(action.dueDate)}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function scalar(value: string | string[] | undefined) {

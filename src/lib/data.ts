@@ -6,7 +6,16 @@ import {
   type CommissionCreditInput,
 } from "./commission";
 import { getPrisma } from "./db";
+import { crmStepTemplates } from "./crm-steps";
 import { monthKey } from "./format";
+import { canManage } from "./roles";
+
+type CurrentUser = {
+  role: string;
+  displayName: string;
+  username: string;
+  email?: string | null;
+};
 
 export async function getFormOptions() {
   const prisma = getPrisma();
@@ -23,7 +32,7 @@ export async function getDashboardData(month = monthKey()) {
   const prisma = getPrisma();
   const [openCount, pendingApprovals, recentOpportunities, salesThisMonth, locations, commissionSummary] = await Promise.all([
     prisma.membershipOpportunity.count({ where: { status: "OPEN" } }),
-    prisma.membershipSale.count({ where: { approvalStatus: "PENDING_SPLIT_APPROVAL" } }),
+    prisma.membershipSale.count({ where: { approvalStatus: "PENDING" } }),
     prisma.membershipOpportunity.findMany({
       take: 8,
       orderBy: { createdAt: "desc" },
@@ -41,9 +50,18 @@ export async function getDashboardData(month = monthKey()) {
       orderBy: [{ membershipSaleDate: "desc" }, { createdAt: "desc" }],
     }),
     prisma.location.findMany({ orderBy: { code: "asc" } }),
-    getCommissionSummary(month),
+    getCommissionSummary(month, null, { includePendingAsEstimated: true }),
   ]);
 
+  const leaderboardSummary = commissionSummary
+    .sort((a, b) => {
+      const commissionDiff = b.result.finalCommissionCents - a.result.finalCommissionCents;
+      if (commissionDiff !== 0) {
+        return commissionDiff;
+      }
+      const creditDiff = b.result.totalCreditBasisPoints - a.result.totalCreditBasisPoints;
+      return creditDiff !== 0 ? creditDiff : a.staff.displayName.localeCompare(b.staff.displayName);
+    });
   const firstVisitSales = salesThisMonth.filter((sale) => sale.isFirstVisitSale).length;
   const soldByLocation = locations.map((location) => ({
     code: location.code,
@@ -57,24 +75,32 @@ export async function getDashboardData(month = monthKey()) {
     salesThisMonth,
     firstVisitCloseRate: salesThisMonth.length ? Math.round((firstVisitSales / salesThisMonth.length) * 100) : 0,
     soldByLocation,
-    commissionSummary,
+    commissionSummary: leaderboardSummary,
   };
 }
 
-export async function getOpportunities(params: Record<string, string | string[] | undefined>) {
+export async function getOpportunities(params: Record<string, string | string[] | undefined>, visibleStaffId?: string | null) {
   const prisma = getPrisma();
   const page = Number(params.page ?? 1);
   const take = 25;
   const skip = (Math.max(page, 1) - 1) * take;
   const search = scalar(params.search);
-  const status = scalar(params.status);
   const locationId = scalar(params.locationId);
   const closerId = scalar(params.closerId);
 
   const where: Prisma.MembershipOpportunityWhereInput = {
-    ...(status ? { status } : {}),
-    ...(locationId ? { locationId } : {}),
-    ...(closerId ? { proposedPrimaryCloserId: closerId } : {}),
+    status: "OPEN",
+    interestLevel: { in: ["Hot", "Warm"] },
+    ...(visibleStaffId
+      ? {
+          OR: [
+            { proposedPrimaryCloserId: visibleStaffId },
+            { proposedSupportCloserId: visibleStaffId },
+          ],
+        }
+      : {}),
+    ...(!visibleStaffId && locationId ? { locationId } : {}),
+    ...(!visibleStaffId && closerId ? { proposedPrimaryCloserId: closerId } : {}),
     ...(search
       ? {
           OR: [
@@ -91,7 +117,7 @@ export async function getOpportunities(params: Record<string, string | string[] 
       where,
       take,
       skip,
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      orderBy: [{ client: { firstVisitDate: "desc" } }, { createdAt: "desc" }],
       include: {
         client: true,
         location: true,
@@ -134,8 +160,9 @@ export async function getOpportunity(id: string) {
   });
 }
 
-export async function getMembershipSales(params: Record<string, string | string[] | undefined>) {
+export async function getMembershipSales(params: Record<string, string | string[] | undefined>, user?: CurrentUser | null, visibleStaffId?: string | null) {
   const prisma = getPrisma();
+  const canSeeAll = user ? canManage(user.role) : false;
   const month = scalar(params.month) || monthKey();
   const locationId = scalar(params.locationId);
   const primaryId = scalar(params.primaryId);
@@ -146,11 +173,21 @@ export async function getMembershipSales(params: Record<string, string | string[
   return prisma.membershipSale.findMany({
     where: {
       ...saleMonthWhere(month),
-      ...(locationId ? { locationId } : {}),
-      ...(primaryId ? { finalPrimaryCloserId: primaryId } : {}),
-      ...(supportId ? { finalSupportCloserId: supportId } : {}),
-      ...(firstVisit ? { isFirstVisitSale: firstVisit === "true" } : {}),
-      ...(approvalStatus ? { approvalStatus } : {}),
+      ...(canSeeAll && locationId ? { locationId } : {}),
+      ...(canSeeAll && primaryId ? { finalPrimaryCloserId: primaryId } : {}),
+      ...(canSeeAll && supportId ? { finalSupportCloserId: supportId } : {}),
+      ...(canSeeAll && firstVisit ? { isFirstVisitSale: firstVisit === "true" } : {}),
+      ...(canSeeAll && approvalStatus ? { approvalStatus } : {}),
+      ...(!canSeeAll
+        ? visibleStaffId
+          ? {
+              OR: [
+                { finalPrimaryCloserId: visibleStaffId },
+                { finalSupportCloserId: visibleStaffId },
+              ],
+            }
+          : { id: "__no_matching_staff__" }
+        : {}),
     },
     orderBy: [{ membershipSaleDate: "desc" }, { createdAt: "desc" }],
     include: {
@@ -164,21 +201,31 @@ export async function getMembershipSales(params: Record<string, string | string[
   });
 }
 
-export async function getCommissionSummary(month = monthKey()) {
+export async function getCommissionSummary(
+  month = monthKey(),
+  visibleStaffId?: string | null,
+  options: { includePendingAsEstimated?: boolean } = {},
+) {
   const prisma = getPrisma();
   const [creditInputs, staff, settingsRows, pendingSplits, openOpportunities] = await Promise.all([
     getSaleCreditInputs(month),
-    prisma.staff.findMany({ where: { active: true }, orderBy: { displayName: "asc" } }),
+    prisma.staff.findMany({
+      where: { active: true, ...(visibleStaffId ? { id: visibleStaffId } : {}) },
+      orderBy: { displayName: "asc" },
+    }),
     prisma.commissionSetting.findMany(),
     prisma.membershipSale.findMany({
-      where: { ...saleMonthWhere(month), approvalStatus: "PENDING_SPLIT_APPROVAL" },
+      where: { ...saleMonthWhere(month), approvalStatus: "PENDING" },
       include: { finalPrimaryCloser: true, finalSupportCloser: true },
     }),
     prisma.membershipOpportunity.findMany({ where: { status: "OPEN" } }),
   ]);
 
   const settings = settingsFromRows(settingsRows);
-  const results = calculateCommissionByStaff(filterCreditsForMonth(creditInputs, month), settings);
+  const estimatedCreditInputs = options.includePendingAsEstimated
+    ? creditInputs.map((credit) => credit.approvalStatus === "PENDING" ? { ...credit, approvalStatus: "APPROVED" } : credit)
+    : creditInputs;
+  const results = calculateCommissionByStaff(filterCreditsForMonth(estimatedCreditInputs, month), settings);
 
   return staff.map((person) => {
     const result = results.find((item) => item.staffId === person.id);
@@ -215,7 +262,7 @@ export async function getMonthEndData(month = monthKey()) {
     prisma.commissionPeriod.findUnique({ where: { month }, include: { results: { include: { staff: true } } } }),
     getCommissionSummary(month),
     prisma.membershipSale.findMany({
-      where: { ...saleMonthWhere(month), approvalStatus: "PENDING_SPLIT_APPROVAL" },
+      where: { ...saleMonthWhere(month), approvalStatus: "PENDING" },
       include: { opportunity: { include: { client: true } }, finalPrimaryCloser: true, finalSupportCloser: true },
     }),
     prisma.membershipOpportunity.findMany({ where: { status: "DISPUTED" }, include: { client: true } }),
@@ -227,15 +274,33 @@ export async function getMonthEndData(month = monthKey()) {
 
 export async function getAdminData() {
   const prisma = getPrisma();
-  const [users, staff, locations, membershipTypes, settings, auditLogs] = await Promise.all([
+  await Promise.all(
+    crmStepTemplates.map((template) =>
+      prisma.crmStepTemplate.upsert({
+        where: { key: template.key },
+        update: {
+          label: template.label,
+          sortOrder: template.sortOrder,
+        },
+        create: {
+          key: template.key,
+          label: template.label,
+          content: template.defaultContent,
+          sortOrder: template.sortOrder,
+        },
+      }),
+    ),
+  );
+  const [users, staff, locations, membershipTypes, settings, crmSteps, auditLogs] = await Promise.all([
     prisma.user.findMany({ orderBy: [{ active: "desc" }, { displayName: "asc" }] }),
     prisma.staff.findMany({ orderBy: { displayName: "asc" } }),
     prisma.location.findMany({ orderBy: { code: "asc" } }),
     prisma.membershipType.findMany({ orderBy: { name: "asc" } }),
     prisma.commissionSetting.findMany({ orderBy: { key: "asc" } }),
+    prisma.crmStepTemplate.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
     prisma.auditLog.findMany({ take: 30, orderBy: { createdAt: "desc" } }),
   ]);
-  return { users, staff, locations, membershipTypes, settings, auditLogs };
+  return { users, staff, locations, membershipTypes, settings, crmSteps, auditLogs };
 }
 
 export async function getSaleCreditInputs(month?: string): Promise<CommissionCreditInput[]> {

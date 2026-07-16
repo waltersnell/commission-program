@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { normalizePhone } from "./format";
 import { canAdmin, canManage, roles, staffJobs } from "./roles";
-import { firstTimeClientSessions, firstTimeClientTypes, firstTimePrimaryIssues, interestLevels } from "./session-options";
+import {
+  collectedByOptions,
+  firstTimeClientSessions,
+  firstTimeClientTypes,
+  firstTimePrimaryIssues,
+  interestLevels,
+  nextActionOptions,
+} from "./session-options";
+import { crmStepKeys } from "./crm-steps";
 
 const requiredString = z.string().trim().min(1, "This field is required.");
 const optionalString = z.string().trim().optional().or(z.literal(""));
@@ -22,6 +30,7 @@ export const clientEntrySchema = z
     interestLevel: z.enum(interestLevels, { message: "Select an interest level." }),
     proposedPrimaryCloserId: requiredString,
     proposedSupportCloserId: optionalString,
+    collectedBy: z.enum(collectedByOptions, { message: "Select who collected the sale." }),
     notes: optionalString,
   })
   .superRefine((data, ctx) => {
@@ -57,6 +66,17 @@ export const closeOpportunitySchema = z.object({
   opportunityId: requiredString,
   closureReason: requiredString,
   closureNote: optionalString,
+});
+
+export const nextActionSchema = z.object({
+  opportunityId: requiredString,
+  nextAction: z.enum(nextActionOptions, { message: "Select a next action." }),
+});
+
+export const completeOpportunityTaskSchema = z.object({
+  opportunityId: requiredString,
+  completedAction: requiredString,
+  smsMessage: optionalString,
 });
 
 export const staffSchema = z.object({
@@ -110,6 +130,12 @@ export const userDeactivateSchema = z.object({
 export const commissionSettingSchema = z.object({
   settingId: requiredString,
   value: requiredString,
+});
+
+export const crmStepTemplateSchema = z.object({
+  stepId: requiredString,
+  key: z.enum(crmStepKeys),
+  content: z.string().trim().max(5000, "CRM step content must be 5,000 characters or less."),
 });
 
 export const loginSchema = z.object({

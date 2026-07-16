@@ -69,6 +69,10 @@ export function formatCreditBasisPoints(basisPoints: number) {
   return trimDecimal((basisPoints / 10000).toFixed(2));
 }
 
+export function formatBasisPointsPercent(basisPoints: number) {
+  return `${trimDecimal((basisPoints / 100).toFixed(2))}%`;
+}
+
 export function basisPointsToDecimalString(basisPoints: number) {
   const whole = Math.trunc(basisPoints / 10000);
   const fraction = String(Math.abs(basisPoints % 10000)).padStart(4, "0").replace(/0+$/, "");

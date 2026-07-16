@@ -29,6 +29,18 @@ export const firstTimePrimaryIssues = [
 
 export const interestLevels = ["Hot", "Warm", "Cold", "None"] as const;
 
+export const collectedByOptions = ["Primary Closer", "Secondary Closer", "Other"] as const;
+
+export const nextActionOptions = [
+  "Follow Up Needed",
+  "Need 1st Followup",
+  "Need 2nd Followup",
+  "Need 3rd Followup",
+  "Move to Cold",
+  "Rejected",
+  "Completed",
+] as const;
+
 export function displayClientSession(sessionType?: string | null, sessionOther?: string | null) {
   if (!sessionType) {
     return "-";

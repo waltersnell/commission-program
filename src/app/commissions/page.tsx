@@ -1,5 +1,8 @@
 import { getCommissionSummary } from "@/lib/data";
+import { findStaffForUser } from "@/lib/current-staff";
 import { formatCreditBasisPoints, formatMoney, monthKey } from "@/lib/format";
+import { canManage } from "@/lib/roles";
+import { getCurrentUser } from "@/lib/session";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -8,13 +11,16 @@ type PageProps = {
 export default async function CommissionsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const month = scalar(params.month) ?? monthKey();
-  const summary = await getCommissionSummary(month);
+  const user = await getCurrentUser();
+  const canSeeAll = canManage(user?.role ?? "");
+  const visibleStaff = canSeeAll ? null : await findStaffForUser(user);
+  const summary = await getCommissionSummary(month, canSeeAll ? null : visibleStaff?.id ?? "__no_matching_staff__");
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="page-title">Commission Progress</h1>
-        <p className="text-[var(--text-muted)]">Estimated - Finalized at Month-End. Credits are attributed membership units, including 0.70 and 0.30 split credits.</p>
+        <p className="text-[var(--text-muted)]">Estimated - Finalized at Month-End. Pending sales wait for administrator approval before they count.</p>
       </div>
       <form className="card flex flex-wrap items-end gap-3 p-4">
         <label className="grid gap-1">
@@ -37,7 +43,7 @@ export default async function CommissionsPage({ searchParams }: PageProps) {
               <Metric label="Total credited memberships" value={formatCreditBasisPoints(result.totalCreditBasisPoints)} />
               <Metric label="First-visit credits" value={formatCreditBasisPoints(result.firstVisitCreditBasisPoints)} />
               <Metric label="Credits to next tier" value={formatCreditBasisPoints(result.creditsToNextTierBasisPoints)} />
-              <Metric label="Pending split approvals" value={String(pendingSplitCount)} />
+              <Metric label="Pending approvals" value={String(pendingSplitCount)} />
               <Metric label="Open connected opportunities" value={String(openOpportunityCount)} />
               <Metric label="Estimated base commission" value={formatMoney(result.baseCommissionCents)} />
               <Metric label="Estimated first-visit bonus" value={formatMoney(result.firstVisitBonusCents)} />

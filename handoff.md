@@ -1,12 +1,30 @@
 # Handoff
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 
 ## Current State
 
 The app is a local Next.js/TypeScript/Prisma SQLite commission tracker for Thai Sport Bodyworks. It has login protection, local user management, administrator-managed commissionable staff, first-time client intake, opportunities, membership sales, commission summaries, and month-end flows.
 
-Latest implemented flow: Add First Time Client now has two submit paths.
+Latest in-progress flow: Dashboard and opportunity workflow updates for the active month.
+
+- Dashboard title now shows `Leaderboard` followed by the current date.
+- Dashboard Estimated Commissions lists all active staff and estimates commissions from both pending and approved sales.
+- Add First Time Client captures `Collected By` and saves an intake submit timestamp on the opportunity.
+- Open Opportunities defaults to open records sorted by newest first-visit date.
+- Open Opportunities only shows Hot and Warm opportunities; Cold, None, and sold opportunities are hidden.
+- Next Action is guide-driven display text instead of a dropdown: Hot and Warm currently show `Personal SMS`, with due dates at first-visit +1 day and +2 days respectively. Late due dates turn orange.
+- Opportunity detail shows a Next Action panel above Membership Sale with an editable SmartCare FAQ SMS, Copy SMS, and Task Completed. Completing Hot `Personal SMS` advances the opportunity to `Phone Outreach` due first-visit +3 days.
+- Opportunity detail SMS editor is enlarged and Copy SMS now uses `navigator.clipboard` with a textarea selection fallback for normal paste.
+- Client Information on opportunity detail includes collection notes and no longer repeats Next Action.
+- Add First Time Client validation now uses client-side checks plus `useActionState` server errors so rejected fields beep, show inline errors, and do not clear entered data.
+- Administration includes editable CRM Step templates for Initial Text Message, Final Text Message, Initial Email, Final Email, and Initial Voice Script. Each template opens for editing only after tapping that action.
+- Administration sections are collapsed by default and each panel opens/closes independently from its title row.
+- Month-End and Admin are administrator-only in navigation and direct page access.
+- New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
+- Non-manager sales and commission views are limited to the logged-in user's matching staff record.
+
+Previous implemented flow: Add First Time Client has two submit paths.
 
 - `Create opportunity` creates the client/opportunity, shows `Opportunity is created`, and returns to Dashboard.
 - `Sold Membership` creates the client/opportunity, records a same-day membership sale, applies the existing first-visit $10 commission credit, shows `Good Job`, and returns to Dashboard.
@@ -23,8 +41,15 @@ Latest implemented flow: Add First Time Client now has two submit paths.
 
 - `src/app/actions.ts`
 - `src/app/page.tsx`
+- `src/app/admin/admin-panel.tsx`
+- `src/app/admin/crm-steps-editor.tsx`
 - `src/app/clients/new/new-client-form.tsx`
+- `src/app/opportunities/[id]/next-action-card.tsx`
+- `src/lib/client-form-state.ts`
+- `src/lib/crm-steps.ts`
 - `src/lib/session-options.ts`
+- `prisma/schema.prisma`
+- `prisma/migrations/20260716133000_add_crm_step_templates/migration.sql`
 - `next.config.ts`
 - `README.md`
 - `AGENTS.md`
@@ -51,8 +76,8 @@ Smoke checks against the running dev server confirmed:
 ## Known Issues
 
 - Playwright package exists in dependencies, but the browser binary is not installed, so browser automation could not run.
-- Git repository has no commits yet, and most project files are untracked.
 - Current LAN URL may change when the network changes; re-check with `ipconfig getifaddr en0`.
+- Repository now has the initial commit `ca1ca70 Initial commission tracker state`; working tree was clean after verification on 2026-07-14.
 
 ## Useful Commands
 

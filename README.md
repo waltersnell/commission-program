@@ -36,11 +36,14 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 
 ## Current Workflows
 
-- Administrator: manage user access, commissionable staff, and commission settings.
-- Add First Time Client: collect contact/session/client details, therapist, interest level, and closer assignments.
+- Administrator: manage user access, commissionable staff, commission settings, and editable CRM step templates from collapsed panels that open and close individually.
+- Add First Time Client: collect contact/session/client details, therapist, interest level, closer assignments, and who collected the membership conversation. Validation errors beep, highlight the rejected field, and keep entered data in place for correction.
 - Create opportunity: saves the client and opportunity, then returns to Dashboard with a success message.
-- Sold Membership: saves the client and opportunity, records a same-day membership sale, assigns the first-visit commission credit, then returns to Dashboard with a success message.
-- Opportunities: list open work with Name, First Visit, Location, Primary, Days Open, Interest Level, and Next Action.
+- Sold Membership: saves the client and opportunity, records a same-day pending membership sale, assigns the first-visit commission credit, then returns to Dashboard with a success message.
+- Dashboard: shows `Leaderboard` plus the current date and estimates commissions for all active staff using pending and approved sales.
+- Opportunities: administrators see filterable open Hot/Warm opportunities; other users see only open Hot/Warm opportunities tied to their matching commissionable staff record. Next Action is currently `Personal SMS` with Hot due first-visit +1 day and Warm due first-visit +2 days.
+- Sales and commissions: managers and administrators can review all records; front desk users see only their own sales and commissions. Pending sales do not count until an administrator approves them.
+- Opportunity detail: client information includes collection notes, and a Next Action panel provides the due date, a large editable SMS copy window, copy button with clipboard fallback, and Task Completed workflow.
 
 ## Database
 

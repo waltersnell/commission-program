@@ -10,12 +10,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const data = await getDashboardData();
   const params = searchParams ? await searchParams : ({} as Record<string, string | string[] | undefined>);
   const message = scalar(params.message);
+  const todayLabel = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date());
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="page-title">Dashboard</h1>
+          <h1 className="page-title">Leaderboard {todayLabel}</h1>
           <p className="text-[var(--text-muted)]">Active-month snapshot for first-time client follow-up and commissions.</p>
         </div>
         <Link href="/clients/new" className="button-accent">

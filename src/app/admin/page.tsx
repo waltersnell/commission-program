@@ -6,18 +6,25 @@ import {
   updateStaffAction,
   updateUserAction,
 } from "@/app/actions";
+import { redirect } from "next/navigation";
 import { getAdminData } from "@/lib/data";
 import { basisPointsToPercentInput, centsToDollarInput, displayStatus } from "@/lib/format";
 import { canAdmin, roleLabel, roles, staffJobs } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
+import { AdminPanel } from "./admin-panel";
+import { CrmStepsEditor } from "./crm-steps-editor";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export default async function AdminPage({ searchParams }: PageProps) {
-  const [data, role, params] = await Promise.all([getAdminData(), getCurrentRole(), searchParams]);
+  const [role, params] = await Promise.all([getCurrentRole(), searchParams]);
   const isAdmin = canAdmin(role);
+  if (!isAdmin) {
+    redirect("/");
+  }
+  const data = await getAdminData();
   const error = scalar(params.error);
 
   return (
@@ -27,10 +34,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
         <p className="text-[var(--text-muted)]">Manage local users, staff jobs, and commission settings.</p>
       </div>
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
-      {!isAdmin ? <p className="message">You are viewing administrator data in read-only mode.</p> : null}
-
-      <section className="card p-4">
-        <h2 className="section-title mb-3">Create User Access</h2>
+      <AdminPanel title="Create User Access">
         <form action={createUserAction} className="grid gap-3 md:grid-cols-6">
           <input className="field md:col-span-2" name="displayName" placeholder="Name" required disabled={!isAdmin} />
           <select className="field" name="role" required disabled={!isAdmin}>
@@ -43,10 +47,9 @@ export default async function AdminPage({ searchParams }: PageProps) {
           <input className="field" name="password" type="password" placeholder="Password" required disabled={!isAdmin} />
           <button className="button-primary md:col-span-6" type="submit" disabled={!isAdmin}>Create user access</button>
         </form>
-      </section>
+      </AdminPanel>
 
-      <section className="card p-4">
-        <h2 className="section-title mb-3">Users</h2>
+      <AdminPanel title="Users">
         <div className="space-y-3">
           {data.users.map((user) => (
             <div key={user.id} className="rounded-[8px] border border-[var(--border)] p-3">
@@ -77,10 +80,9 @@ export default async function AdminPage({ searchParams }: PageProps) {
             </div>
           ))}
         </div>
-      </section>
+      </AdminPanel>
 
-      <section className="card p-4">
-        <h2 className="section-title mb-3">Add Commissionable Staff</h2>
+      <AdminPanel title="Add Commissionable Staff">
         <form action={createStaffAction} className="grid gap-3 md:grid-cols-5">
           <input className="field" name="firstName" placeholder="First name" required disabled={!isAdmin} />
           <input className="field" name="lastName" placeholder="Last name" disabled={!isAdmin} />
@@ -92,10 +94,9 @@ export default async function AdminPage({ searchParams }: PageProps) {
           </select>
           <button className="button-primary" type="submit" disabled={!isAdmin}>Add commissionable staff</button>
         </form>
-      </section>
+      </AdminPanel>
 
-      <section className="card p-4">
-        <h2 className="section-title mb-3">Commissionable Staff</h2>
+      <AdminPanel title="Commissionable Staff">
         <div className="space-y-3">
           {data.staff.map((person) => (
             <form key={person.id} action={updateStaffAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-6">
@@ -116,10 +117,9 @@ export default async function AdminPage({ searchParams }: PageProps) {
             </form>
           ))}
         </div>
-      </section>
+      </AdminPanel>
 
-      <section className="card p-4">
-        <h2 className="section-title mb-3">Commission Settings</h2>
+      <AdminPanel title="Commission Settings">
         <div className="space-y-3">
           {data.settings.map((setting) => (
             <form key={setting.id} action={updateCommissionSettingAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-[1.5fr_1fr_auto]">
@@ -133,15 +133,22 @@ export default async function AdminPage({ searchParams }: PageProps) {
             </form>
           ))}
         </div>
-      </section>
+      </AdminPanel>
+
+      <AdminPanel title="CRM Steps">
+        <CrmStepsEditor steps={data.crmSteps} />
+      </AdminPanel>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <ListCard title="Locations" rows={data.locations.map((location) => [location.code, location.name, location.active ? "Active" : "Inactive"])} />
-        <ListCard title="Membership Types" rows={data.membershipTypes.map((type) => [type.name, type.active ? "Active" : "Inactive", ""])} />
+        <AdminPanel title="Locations">
+          <ListRows rows={data.locations.map((location) => [location.code, location.name, location.active ? "Active" : "Inactive"])} />
+        </AdminPanel>
+        <AdminPanel title="Membership Types">
+          <ListRows rows={data.membershipTypes.map((type) => [type.name, type.active ? "Active" : "Inactive", ""])} />
+        </AdminPanel>
       </section>
 
-      <section className="card p-4">
-        <h2 className="section-title mb-3">Audit History</h2>
+      <AdminPanel title="Audit History">
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -166,7 +173,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
             </tbody>
           </table>
         </div>
-      </section>
+      </AdminPanel>
     </div>
   );
 }
@@ -191,19 +198,16 @@ function settingHelp(key: string) {
   return "Credit count";
 }
 
-function ListCard({ title, rows }: { title: string; rows: string[][] }) {
+function ListRows({ rows }: { rows: string[][] }) {
   return (
-    <section className="card p-4">
-      <h2 className="section-title mb-3">{title}</h2>
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <div key={row.join("-")} className="border-b border-[var(--border)] pb-2">
-            <p className="font-semibold">{row[0]}</p>
-            <p className="text-sm text-[var(--text-muted)]">{row.filter(Boolean).slice(1).join(" - ")}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+    <div className="space-y-2">
+      {rows.map((row) => (
+        <div key={row.join("-")} className="border-b border-[var(--border)] pb-2">
+          <p className="font-semibold">{row[0]}</p>
+          <p className="text-sm text-[var(--text-muted)]">{row.filter(Boolean).slice(1).join(" - ")}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 

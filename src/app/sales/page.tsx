@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { getFormOptions, getMembershipSales } from "@/lib/data";
-import { dateInputValue, displayStatus, formatCreditBasisPoints } from "@/lib/format";
+import { dateInputValue, displayStatus, formatBasisPointsPercent, monthKey } from "@/lib/format";
+import { findStaffForUser } from "@/lib/current-staff";
+import { canManage } from "@/lib/roles";
+import { getCurrentUser } from "@/lib/session";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -8,36 +11,52 @@ type PageProps = {
 
 export default async function SalesPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const [sales, { locations, staff }] = await Promise.all([getMembershipSales(params), getFormOptions()]);
+  const user = await getCurrentUser();
+  const canSeeAll = canManage(user?.role ?? "");
+  const visibleStaff = canSeeAll ? null : await findStaffForUser(user);
+  const [sales, { locations, staff }] = await Promise.all([
+    getMembershipSales(params, user, canSeeAll ? null : visibleStaff?.id ?? "__no_matching_staff__"),
+    getFormOptions(),
+  ]);
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="page-title">Membership Sales</h1>
-        <p className="text-[var(--text-muted)]">Approved sales count toward final commission; pending split approvals stay out of final results.</p>
+        <p className="text-[var(--text-muted)]">Pending sales wait for administrator approval before they count toward final commission.</p>
       </div>
-      <form className="card grid gap-3 p-4 md:grid-cols-6">
-        <input className="field" type="month" name="month" defaultValue={scalar(params.month) ?? new Date().toISOString().slice(0, 7)} />
-        <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
-          <option value="">All locations</option>
-          {locations.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}
-        </select>
-        <select className="field" name="primaryId" defaultValue={scalar(params.primaryId) ?? ""}>
-          <option value="">Primary closer</option>
-          {staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
-        </select>
-        <select className="field" name="supportId" defaultValue={scalar(params.supportId) ?? ""}>
-          <option value="">Support closer</option>
-          {staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
-        </select>
-        <select className="field" name="approvalStatus" defaultValue={scalar(params.approvalStatus) ?? ""}>
-          <option value="">All approvals</option>
-          <option value="APPROVED">Approved</option>
-          <option value="PENDING_SPLIT_APPROVAL">Pending split</option>
-          <option value="REJECTED">Rejected</option>
-        </select>
-        <button className="button-primary" type="submit">Filter</button>
-      </form>
+      {canSeeAll ? (
+        <form className="card grid gap-3 p-4 md:grid-cols-6">
+          <input className="field" type="month" name="month" defaultValue={scalar(params.month) ?? monthKey()} />
+          <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
+            <option value="">All locations</option>
+            {locations.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}
+          </select>
+          <select className="field" name="primaryId" defaultValue={scalar(params.primaryId) ?? ""}>
+            <option value="">Primary closer</option>
+            {staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+          </select>
+          <select className="field" name="supportId" defaultValue={scalar(params.supportId) ?? ""}>
+            <option value="">Support closer</option>
+            {staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+          </select>
+          <select className="field" name="approvalStatus" defaultValue={scalar(params.approvalStatus) ?? ""}>
+            <option value="">All approvals</option>
+            <option value="APPROVED">Approved</option>
+            <option value="PENDING">Pending</option>
+            <option value="REJECTED">Rejected</option>
+          </select>
+          <button className="button-primary" type="submit">Filter</button>
+        </form>
+      ) : (
+        <form className="card flex flex-wrap items-end gap-3 p-4">
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold">Month</span>
+            <input className="field" type="month" name="month" defaultValue={scalar(params.month) ?? monthKey()} />
+          </label>
+          <button className="button-primary" type="submit">View month</button>
+        </form>
+      )}
 
       <section className="card p-4">
         <div className="table-wrap">
@@ -71,12 +90,12 @@ export default async function SalesPage({ searchParams }: PageProps) {
                   <td>
                     <div className="flex flex-wrap gap-1">
                       {sale.credits.map((credit) => (
-                        <span key={credit.id} className="badge badge-gray">{credit.staff.displayName} {formatCreditBasisPoints(credit.creditBasisPoints)}</span>
+                        <span key={credit.id} className="badge badge-gray">{credit.staff.displayName} {formatBasisPointsPercent(credit.creditBasisPoints)}</span>
                       ))}
                     </div>
                   </td>
                   <td>{sale.isFirstVisitSale ? <span className="badge badge-orange">Yes</span> : "No"}</td>
-                  <td><span className="badge badge-teal">{displayStatus(sale.approvalStatus)}</span></td>
+                  <td><ApprovalBadge status={sale.approvalStatus} /></td>
                 </tr>
               ))}
             </tbody>
@@ -86,6 +105,13 @@ export default async function SalesPage({ searchParams }: PageProps) {
       </section>
     </div>
   );
+}
+
+function ApprovalBadge({ status }: { status: string }) {
+  const isApproved = status === "APPROVED";
+  const isRejected = status === "REJECTED";
+  const label = status === "PENDING" ? "Pending" : displayStatus(status);
+  return <span className={`badge ${isApproved ? "badge-teal" : isRejected ? "badge-gray" : "badge-orange"}`}>{label}</span>;
 }
 
 function scalar(value: string | string[] | undefined) {

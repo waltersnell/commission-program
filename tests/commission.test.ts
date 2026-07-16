@@ -10,6 +10,7 @@ import {
 import { saleEntrySchema } from "../src/lib/validation";
 import { clientEntrySchema } from "../src/lib/validation";
 import { toLocalDate } from "../src/lib/format";
+import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
 
 const staffId = "staff-a";
 
@@ -111,8 +112,8 @@ describe("commission calculations", () => {
     expect(result.finalCommissionCents).toBe(0);
   });
 
-  it("does not count pending split approvals in final commission results", () => {
-    const result = calculateCommissionForStaff(staffId, [credit({ approvalStatus: "PENDING_SPLIT_APPROVAL" })]);
+  it("does not count pending approvals in final commission results", () => {
+    const result = calculateCommissionForStaff(staffId, [credit({ approvalStatus: "PENDING" })]);
     expect(result.finalCommissionCents).toBe(0);
   });
 
@@ -150,6 +151,7 @@ describe("validation and locking", () => {
       interestLevel: "Warm",
       proposedPrimaryCloserId: "staff-a",
       proposedSupportCloserId: "",
+      collectedBy: "Primary Closer",
       notes: "",
     });
 
@@ -172,6 +174,7 @@ describe("validation and locking", () => {
       interestLevel: "Hot",
       proposedPrimaryCloserId: "staff-a",
       proposedSupportCloserId: "",
+      collectedBy: "Primary Closer",
       notes: "",
     });
 
@@ -181,5 +184,37 @@ describe("validation and locking", () => {
   it("prevents Front Desk users from editing finalized months", () => {
     expect(assertCanEditPeriod("FRONT_DESK", "FINALIZED")).toBe(false);
     expect(assertCanEditPeriod("ADMINISTRATOR", "FINALIZED")).toBe(true);
+  });
+});
+
+describe("opportunity next actions", () => {
+  it("sets Hot personal SMS due one day after first visit", () => {
+    const action = getOpportunityNextAction({
+      interestLevel: "Hot",
+      firstVisitDate: toLocalDate("2026-07-12"),
+    });
+
+    expect(action?.label).toBe("Personal SMS");
+    expect(action?.dueDate?.toISOString().slice(0, 10)).toBe("2026-07-13");
+  });
+
+  it("sets Warm personal SMS due two days after first visit", () => {
+    const action = getOpportunityNextAction({
+      interestLevel: "Warm",
+      firstVisitDate: toLocalDate("2026-07-12"),
+    });
+
+    expect(action?.label).toBe("Personal SMS");
+    expect(action?.dueDate?.toISOString().slice(0, 10)).toBe("2026-07-14");
+  });
+
+  it("advances a Hot completed personal SMS to phone outreach", () => {
+    const next = getNextActionAfterCompletion({
+      interestLevel: "Hot",
+      firstVisitDate: toLocalDate("2026-07-12"),
+    });
+
+    expect(next.status).toBe("Phone Outreach");
+    expect(next.dueDate?.toISOString().slice(0, 10)).toBe("2026-07-15");
   });
 });

@@ -83,6 +83,7 @@ model MembershipOpportunity {
   firstVisitTherapistId   String?
   proposedPrimaryCloserId String
   proposedSupportCloserId String?
+  collectedBy             String   @default("Primary Closer")
   status                  String   @default("OPEN")
   interestLevel           String   @default("None")
   closureReason           String?
@@ -90,8 +91,9 @@ model MembershipOpportunity {
   lastFollowUpDate        DateTime?
   nextFollowUpDate        DateTime?
   followUpOwnerId         String?
-  followUpStatus          String   @default("NOT_CONTACTED")
+  followUpStatus          String   @default("Follow Up Needed")
   followUpNotes           String?
+  intakeSubmittedAt       DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -117,7 +119,7 @@ model MembershipSale {
   membershipTypeId      String
   finalPrimaryCloserId  String
   finalSupportCloserId  String?
-  approvalStatus        String   @default("APPROVED")
+  approvalStatus        String   @default("PENDING")
   isFirstVisitSale      Boolean
   notes                 String?
   createdAt             DateTime @default(now())
@@ -203,6 +205,16 @@ model CommissionSetting {
   editableBy  String   @default("ADMINISTRATOR")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model CrmStepTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  content   String   @default("")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AuditLog {

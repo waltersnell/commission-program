@@ -29,11 +29,14 @@ import {
 import {
   clientEntrySchema,
   closeOpportunitySchema,
+  completeOpportunityTaskSchema,
   commissionSettingSchema,
+  crmStepTemplateSchema,
   ensureRoleCanClose,
   ensureRoleCanFinalize,
   ensureRoleCanReopen,
   loginSchema,
+  nextActionSchema,
   passwordResetSchema,
   saleEntrySchema,
   staffSchema,
@@ -41,6 +44,13 @@ import {
   userDeactivateSchema,
   userEditSchema,
 } from "@/lib/validation";
+import { getNextActionAfterCompletion } from "@/lib/opportunity-next-action";
+import {
+  initialNewClientFormState,
+  newClientValuesFromFormData,
+  type NewClientFormState,
+  type NewClientFormValues,
+} from "@/lib/client-form-state";
 
 export async function loginAction(formData: FormData) {
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
@@ -103,18 +113,21 @@ export async function resetPasswordAction(formData: FormData) {
   redirect(`/login?message=${encodeURIComponent("Password updated. Please sign in.")}`);
 }
 
-export async function createClientAction(formData: FormData) {
+export async function createClientAction(_state: NewClientFormState = initialNewClientFormState, formData: FormData): Promise<NewClientFormState> {
+  void _state;
   const user = await requireCurrentUser();
   const role = user.role;
   const soldMembership = formData.get("intent") === "soldMembership";
+  const values = newClientValuesFromFormData(formData);
   const parsed = clientEntrySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/clients/new?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the form.")}`);
+    return clientFormError(values, parsed.error.issues[0]?.message ?? "Check the form.", fieldErrorsFromIssues(parsed.error.issues));
   }
 
   const data = parsed.data;
   const phone = normalizePhone(data.phone);
   const firstVisitDate = toLocalDate(data.firstVisitDate);
+  const submittedAt = new Date();
   const prisma = getPrisma();
   const duplicate = await prisma.client.findFirst({
     where: {
@@ -130,7 +143,10 @@ export async function createClientAction(formData: FormData) {
   });
 
   if (duplicate && (role === "FRONT_DESK" || formData.get("allowDuplicate") !== "true")) {
-    redirect(`/clients/new?duplicate=${duplicate.id}&error=${encodeURIComponent("Possible duplicate found. Managers can continue when appropriate.")}`);
+    const message = role === "FRONT_DESK"
+      ? "Possible duplicate found. Ask a manager to review before continuing."
+      : "Possible duplicate found. Check continue if this is a separate client.";
+    return clientFormError(values, message, {}, duplicate.id);
   }
 
   let soldMembershipSetup: { membershipTypeId: string; settings: ReturnType<typeof settingsFromRows> } | null = null;
@@ -144,10 +160,10 @@ export async function createClientAction(formData: FormData) {
 
     const membershipType = preferredMembershipType ?? fallbackMembershipType;
     if (!membershipType) {
-      redirect(`/clients/new?error=${encodeURIComponent("Create at least one active membership type before marking a membership sold.")}`);
+      return clientFormError(values, "Create at least one active membership type before marking a membership sold.");
     }
     if (!assertCanEditPeriod(role, period?.status)) {
-      redirect(`/clients/new?error=${encodeURIComponent("Front Desk users cannot edit records in finalized months.")}`);
+      return clientFormError(values, "Front Desk users cannot edit records in finalized months.");
     }
 
     soldMembershipSetup = {
@@ -180,6 +196,9 @@ export async function createClientAction(formData: FormData) {
         interestLevel: data.interestLevel,
         proposedPrimaryCloserId: data.proposedPrimaryCloserId,
         proposedSupportCloserId: data.proposedSupportCloserId || null,
+        collectedBy: data.collectedBy,
+        followUpStatus: "Follow Up Needed",
+        intakeSubmittedAt: submittedAt,
       },
     });
     await tx.auditLog.create({
@@ -202,9 +221,10 @@ export async function createClientAction(formData: FormData) {
           membershipTypeId: soldMembershipSetup.membershipTypeId,
           finalPrimaryCloserId: data.proposedPrimaryCloserId,
           finalSupportCloserId: supportId,
-          approvalStatus: supportId ? "PENDING_SPLIT_APPROVAL" : "APPROVED",
+          approvalStatus: "PENDING",
           isFirstVisitSale: true,
           notes: data.notes || null,
+          createdAt: submittedAt,
         },
       });
       await tx.saleCredit.createMany({
@@ -235,6 +255,103 @@ export async function createClientAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/opportunities");
   redirect(`/?message=${encodeURIComponent(soldMembership ? "Good Job" : "Opportunity is created")}`);
+}
+
+export async function updateNextActionAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const parsed = nextActionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return;
+  }
+
+  const now = new Date();
+  await getPrisma().$transaction(async (tx) => {
+    await tx.membershipOpportunity.update({
+      where: { id: parsed.data.opportunityId },
+      data: {
+        followUpStatus: parsed.data.nextAction,
+        lastFollowUpDate: now,
+      },
+    });
+    await tx.followUp.create({
+      data: {
+        opportunityId: parsed.data.opportunityId,
+        followUpDate: now,
+        ownerId: null,
+        status: parsed.data.nextAction,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actingUser: user.role,
+        action: "NEXT_ACTION_UPDATED",
+        recordType: "MembershipOpportunity",
+        recordId: parsed.data.opportunityId,
+        newValue: parsed.data.nextAction,
+      },
+    });
+  });
+
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${parsed.data.opportunityId}`);
+}
+
+export async function completeOpportunityTaskAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const parsed = completeOpportunityTaskSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/opportunities/${formData.get("opportunityId")}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the task.")}`);
+  }
+
+  const prisma = getPrisma();
+  const opportunity = await prisma.membershipOpportunity.findUnique({
+    where: { id: parsed.data.opportunityId },
+    include: { client: true },
+  });
+  if (!opportunity) {
+    redirect(`/opportunities?error=${encodeURIComponent("Opportunity was not found.")}`);
+  }
+
+  const next = getNextActionAfterCompletion({
+    interestLevel: opportunity.interestLevel,
+    firstVisitDate: opportunity.client.firstVisitDate,
+    followUpStatus: opportunity.followUpStatus,
+    nextFollowUpDate: opportunity.nextFollowUpDate,
+  });
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.followUp.create({
+      data: {
+        opportunityId: opportunity.id,
+        followUpDate: now,
+        status: `${parsed.data.completedAction} Completed`,
+        notes: parsed.data.smsMessage || null,
+      },
+    });
+    await tx.membershipOpportunity.update({
+      where: { id: opportunity.id },
+      data: {
+        followUpStatus: next.status,
+        nextFollowUpDate: next.dueDate,
+        lastFollowUpDate: now,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actingUser: user.role,
+        action: "OPPORTUNITY_TASK_COMPLETED",
+        recordType: "MembershipOpportunity",
+        recordId: opportunity.id,
+        previousValue: parsed.data.completedAction,
+        newValue: next.status,
+      },
+    });
+  });
+
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${opportunity.id}`);
+  redirect(`/opportunities/${opportunity.id}?task=completed`);
 }
 
 export async function recordSaleAction(formData: FormData) {
@@ -281,7 +398,7 @@ export async function recordSaleAction(formData: FormData) {
         membershipTypeId: data.membershipTypeId,
         finalPrimaryCloserId: data.finalPrimaryCloserId,
         finalSupportCloserId: supportId,
-        approvalStatus: supportId ? "PENDING_SPLIT_APPROVAL" : "APPROVED",
+        approvalStatus: "PENDING",
         isFirstVisitSale: firstVisit,
         notes: data.notes || null,
       },
@@ -311,14 +428,15 @@ export async function recordSaleAction(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/opportunities");
   redirect(`/opportunities/${opportunity.id}?sale=1`);
 }
 
 export async function approveSplitAction(formData: FormData) {
   const user = await requireCurrentUser();
   const role = user.role;
-  if (!canManage(role)) {
-    redirect(`/month-end?error=${encodeURIComponent("Only managers and administrators can approve split sales.")}`);
+  if (!canAdmin(role)) {
+    redirect(`/month-end?error=${encodeURIComponent("Only administrators can approve membership sales.")}`);
   }
   const saleId = String(formData.get("saleId") ?? "");
   const action = String(formData.get("approval") ?? "APPROVED");
@@ -330,7 +448,7 @@ export async function approveSplitAction(formData: FormData) {
     await tx.auditLog.create({
       data: {
         actingUser: role,
-        action: action === "APPROVED" ? "SPLIT_APPROVED" : "SPLIT_REJECTED",
+        action: action === "APPROVED" ? "SALE_APPROVED" : "SALE_REJECTED",
         recordType: "MembershipSale",
         recordId: saleId,
       },
@@ -387,9 +505,9 @@ export async function finalizeMonthAction(formData: FormData) {
   }
 
   const prisma = getPrisma();
-  const pending = await prisma.membershipSale.count({ where: { ...saleMonthWhere(month), approvalStatus: "PENDING_SPLIT_APPROVAL" } });
+  const pending = await prisma.membershipSale.count({ where: { ...saleMonthWhere(month), approvalStatus: "PENDING" } });
   if (pending > 0) {
-    redirect(`/month-end?month=${month}&error=${encodeURIComponent("Approve or reject pending split sales before finalizing.")}`);
+    redirect(`/month-end?month=${month}&error=${encodeURIComponent("Approve or reject pending membership sales before finalizing.")}`);
   }
 
   const summary = await getCommissionSummary(month);
@@ -542,6 +660,29 @@ export async function updateCommissionSettingAction(formData: FormData) {
   redirect("/admin?settings=updated");
 }
 
+export async function updateCrmStepTemplateAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const role = user.role;
+  requireAdmin(role);
+  const parsed = crmStepTemplateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the CRM step.")}`);
+  }
+
+  const existing = await getPrisma().crmStepTemplate.findUnique({ where: { id: parsed.data.stepId } });
+  if (!existing || existing.key !== parsed.data.key) {
+    redirect(`/admin?error=${encodeURIComponent("CRM step was not found.")}`);
+  }
+
+  const step = await getPrisma().crmStepTemplate.update({
+    where: { id: existing.id },
+    data: { content: parsed.data.content },
+  });
+  await auditAdminChange(role, "CRM_STEP_TEMPLATE_EDITED", "CrmStepTemplate", step.id, step.label);
+  revalidatePath("/admin");
+  redirect("/admin?crm=updated");
+}
+
 export async function createUserAction(formData: FormData) {
   const userSession = await requireCurrentUser();
   const role = userSession.role;
@@ -648,6 +789,31 @@ function normalizeSettingValue(key: string, value: string) {
     return Number.isFinite(credits) && credits > 0 ? String(credits) : null;
   }
   return value.trim();
+}
+
+function clientFormError(
+  values: NewClientFormValues,
+  message: string,
+  fieldErrors: NewClientFormState["fieldErrors"] = {},
+  duplicateId?: string,
+): NewClientFormState {
+  return {
+    status: "error",
+    message,
+    duplicateId,
+    values,
+    fieldErrors,
+  };
+}
+
+function fieldErrorsFromIssues(issues: { path: PropertyKey[]; message: string }[]) {
+  return issues.reduce<NewClientFormState["fieldErrors"]>((errors, issue) => {
+    const key = issue.path[0];
+    if (typeof key === "string" && !(key in errors)) {
+      errors[key as keyof NewClientFormValues] = issue.message;
+    }
+    return errors;
+  }, {});
 }
 
 async function auditAdminChange(role: string, action: string, recordType: string, recordId: string, newValue: string) {
