@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-07-16
+Last updated: 2026-07-24
 
 ## Current State
 
@@ -21,6 +21,7 @@ Latest in-progress flow: Dashboard and opportunity workflow updates for the acti
 - Administration includes editable CRM Step templates for Initial Text Message, Final Text Message, Initial Email, Final Email, and Initial Voice Script. Each template opens for editing only after tapping that action.
 - Administration sections are collapsed by default and each panel opens/closes independently from its title row.
 - Docker support is staged with `Dockerfile`, `.dockerignore`, and `docker-compose.yml`; the container runs `prisma migrate deploy` before `next start` and uses `/app/data/prod.db` for persistent SQLite.
+- GitHub Container Registry support is staged with `.github/workflows/docker-image.yml`; pushes to `main` build and publish `ghcr.io/waltersnell/commission-program:latest`.
 - Month-End and Admin are administrator-only in navigation and direct page access.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.
@@ -51,6 +52,7 @@ Previous implemented flow: Add First Time Client has two submit paths.
 - `Dockerfile`
 - `.dockerignore`
 - `docker-compose.yml`
+- `.github/workflows/docker-image.yml`
 - `src/lib/session-options.ts`
 - `prisma/schema.prisma`
 - `prisma/migrations/20260716133000_add_crm_step_templates/migration.sql`
@@ -94,10 +96,11 @@ npx prisma migrate dev
 npm run db:seed
 docker compose up --build
 docker compose run --rm commission-program npm run docker:seed
+docker pull ghcr.io/waltersnell/commission-program:latest
 ```
 
 ## Next Steps
 
 - Manually test the full Add First Time Client flow on the target device.
 - Decide whether Sold Membership should always award full first-visit credit immediately, even when support closer is selected, or keep split approval.
-- Create a GitHub repository and push `main` when ready for remote backup and Docker hosting work.
+- Push the GitHub Actions workflow to `main`, then confirm the Docker image publishes in GitHub Actions and Packages.

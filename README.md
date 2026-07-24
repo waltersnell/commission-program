@@ -39,6 +39,40 @@ docker compose up
 
 The container runs `prisma migrate deploy` before `next start`. Keep `DATABASE_URL="file:/app/data/prod.db"` and mount `/app/data` as persistent storage so SQLite data survives container rebuilds.
 
+## GitHub Docker Image
+
+GitHub Actions builds and publishes a Docker image to GitHub Container Registry whenever `main` is pushed:
+
+```bash
+ghcr.io/waltersnell/commission-program:latest
+```
+
+The workflow is defined in `.github/workflows/docker-image.yml`. It can also be started manually from the repository's Actions tab with `workflow_dispatch`.
+
+On a Docker-ready VPS, pull and run the GitHub image with persistent SQLite storage:
+
+```bash
+docker pull ghcr.io/waltersnell/commission-program:latest
+docker volume create commission-program-data
+docker run -d \
+  --name commission-program \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -e DATABASE_URL="file:/app/data/prod.db" \
+  -v commission-program-data:/app/data \
+  ghcr.io/waltersnell/commission-program:latest
+```
+
+For a brand-new volume, seed initial local users once:
+
+```bash
+docker run --rm \
+  -e DATABASE_URL="file:/app/data/prod.db" \
+  -v commission-program-data:/app/data \
+  ghcr.io/waltersnell/commission-program:latest \
+  npm run docker:seed
+```
+
 ## Local Users
 
 The app uses local username/password login before loading protected dashboard views.
