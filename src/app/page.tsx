@@ -15,13 +15,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     day: "numeric",
     year: "numeric",
   }).format(new Date());
+  const sortedCommissionSummary = [...data.commissionSummary].sort(sortDashboardCommissions);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="page-shell">
+      <div className="page-header">
         <div>
-          <h1 className="page-title">Leaderboard {todayLabel}</h1>
-          <p className="text-[var(--text-muted)]">Active-month snapshot for first-time client follow-up and commissions.</p>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="text-[var(--text-muted)]">Active-month snapshot for first-time client follow-up and commissions. Updated {todayLabel}.</p>
         </div>
         <Link href="/clients/new" className="button-accent">
           Record first-time client
@@ -29,60 +30,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </div>
       {message ? <p className="message border-[var(--teal)]">{message}</p> : null}
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <Metric label="Open opportunities" value={data.openCount.toString()} />
+      <section className="grid gap-6 md:grid-cols-4">
+        <Metric label="Open opportunities" value={data.openCount.toString()} tone="sage" />
         <Metric label="Memberships sold this month" value={data.salesThisMonth.length.toString()} />
         <Metric label="First-visit close rate" value={`${data.firstVisitCloseRate}%`} />
         <Metric label="Pending approvals" value={data.pendingApprovals.toString()} tone="orange" />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="card p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="section-title">Estimated Commissions</h2>
-            <Link href="/commissions" className="button-secondary">
-              View progress
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Staff</th>
-                  <th>Credits</th>
-                  <th>Tier</th>
-                  <th>Base</th>
-                  <th>First Visit</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.commissionSummary.map(({ staff, result }) => (
-                  <tr key={staff.id}>
-                    <td className="font-semibold">{staff.displayName}</td>
-                    <td>{formatCreditBasisPoints(result.totalCreditBasisPoints)}</td>
-                    <td>{result.currentTier}</td>
-                    <td>{formatMoney(result.baseCommissionCents)}</td>
-                    <td>{formatMoney(result.firstVisitBonusCents)}</td>
-                    <td className="font-semibold">{formatMoney(result.finalCommissionCents)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="card p-4">
-          <h2 className="section-title mb-3">Sales by Location</h2>
-          <div className="space-y-3">
-            {data.soldByLocation.map((item) => (
-              <div key={item.code} className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-                <span className="font-semibold">{item.code}</span>
-                <span className="badge badge-teal">{item.count} approved</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
 
       <section className="card p-4">
@@ -121,6 +73,56 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </table>
         </div>
       </section>
+
+      <section className="workbench-grid">
+        <div className="card p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="section-title">Estimated Commissions</h2>
+            <Link href="/commissions" className="button-secondary">
+              View progress
+            </Link>
+          </div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Staff</th>
+                  <th>Credits</th>
+                  <th>Tier</th>
+                  <th>Base</th>
+                  <th>First Visit</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedCommissionSummary.map(({ staff, result }) => (
+                  <tr key={staff.id}>
+                    <td className="font-semibold">{staff.displayName}</td>
+                    <td>{formatCreditBasisPoints(result.totalCreditBasisPoints)}</td>
+                    <td>{result.currentTier}</td>
+                    <td>{formatMoney(result.baseCommissionCents)}</td>
+                    <td>{formatMoney(result.firstVisitBonusCents)}</td>
+                    <td className="font-semibold">{formatMoney(result.finalCommissionCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <h2 className="section-title mb-3">Sales by Location</h2>
+          <div className="space-y-3">
+            {data.soldByLocation.map((item) => (
+              <div key={item.code} className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+                <span className="font-semibold">{item.code}</span>
+                <span className="badge badge-teal">{item.count} approved</span>
+              </div>
+            ))}
+            {data.soldByLocation.length === 0 ? <p className="empty-state">No active locations are available.</p> : null}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -129,11 +131,11 @@ function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: "orange" }) {
+function Metric({ label, value, tone }: { label: string; value: string; tone?: "orange" | "sage" }) {
   return (
-    <div className="card p-4">
+    <div className="card metric-card p-4">
       <p className="text-sm font-semibold text-[var(--text-muted)]">{label}</p>
-      <p className={tone === "orange" ? "mt-2 text-3xl font-bold text-[var(--orange)]" : "mt-2 text-3xl font-bold text-[var(--charcoal)]"}>{value}</p>
+      <p className={tone === "orange" ? "metric-value metric-value-warn" : "metric-value"}>{value}</p>
     </div>
   );
 }
@@ -141,4 +143,25 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: "
 function StatusBadge({ status }: { status: string }) {
   const cls = status === "OPEN" ? "badge-orange" : status === "MEMBERSHIP_SOLD" ? "badge-teal" : "badge-gray";
   return <span className={`badge ${cls}`}>{displayStatus(status)}</span>;
+}
+
+type DashboardCommissionRow = Awaited<ReturnType<typeof getDashboardData>>["commissionSummary"][number];
+
+function sortDashboardCommissions(a: DashboardCommissionRow, b: DashboardCommissionRow) {
+  const groupDiff = staffSortGroup(a.staff.role) - staffSortGroup(b.staff.role);
+  if (groupDiff !== 0) {
+    return groupDiff;
+  }
+  const commissionDiff = b.result.finalCommissionCents - a.result.finalCommissionCents;
+  return commissionDiff !== 0 ? commissionDiff : a.staff.displayName.localeCompare(b.staff.displayName);
+}
+
+function staffSortGroup(role: string) {
+  if (role === "FRONT_DESK" || role === "SALES") {
+    return 0;
+  }
+  if (role === "THERAPIST") {
+    return 1;
+  }
+  return 2;
 }

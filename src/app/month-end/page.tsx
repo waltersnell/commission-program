@@ -22,8 +22,8 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
   const isFinalized = data.period?.status === "FINALIZED";
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="page-shell">
+      <div className="page-header">
         <div>
           <h1 className="page-title">Month-End Review</h1>
           <p className="text-[var(--text-muted)]">Resolve exceptions, approve pending sales, finalize, and export commission results.</p>
@@ -32,7 +32,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
       </div>
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
 
-      <form className="card flex flex-wrap items-end gap-3 p-4">
+      <form className="card card-soft flex flex-wrap items-end gap-3 p-4">
         <label className="grid gap-1">
           <span className="text-sm font-semibold">Commission month</span>
           <input className="field" type="month" name="month" defaultValue={month} />
@@ -65,7 +65,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
               </div>
             </form>
           ))}
-          {data.pendingSplits.length === 0 ? <p className="text-[var(--text-muted)]">No pending sales.</p> : null}
+          {data.pendingSplits.length === 0 ? <p className="empty-state">No pending sales.</p> : null}
         </div>
       </section>
 

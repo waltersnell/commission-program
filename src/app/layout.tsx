@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import localFont from "next/font/local";
 import { logoutAction } from "./actions";
 import { getCurrentUser } from "@/lib/session";
 import { roleLabel } from "@/lib/roles";
+import { MobileNav } from "./mobile-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,6 +27,16 @@ const adminNavItems = [
   ["Admin", "/admin"],
 ];
 
+const geist = localFont({
+  src: "../../node_modules/next/dist/next-devtools/server/font/geist-latin.woff2",
+  variable: "--font-geist",
+});
+
+const geistMono = localFont({
+  src: "../../node_modules/next/dist/next-devtools/server/font/geist-mono-latin.woff2",
+  variable: "--font-geist-mono",
+});
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -37,22 +49,32 @@ export default async function RootLayout({
   if (pathname && !isAuthPage && !user) {
     redirect("/login");
   }
+  const visibleNavItems = [...navItems, ...(user?.role === "ADMINISTRATOR" ? adminNavItems : [])].map(([label, href]) => ({
+    label,
+    href,
+    active: isActivePath(pathname, href),
+  }));
 
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full`}>
       <body className="min-h-full">
         {!isAuthPage ? (
-          <header className="border-b border-[var(--border)] bg-white">
-            <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <Link href="/" className="text-xl font-semibold text-[var(--charcoal)]">
-                  Thai Sport Commissions
-                </Link>
-                <p className="text-sm text-[var(--text-muted)]">Estimated - Finalized at Month-End</p>
+          <header className="app-header">
+            <div className="app-header-inner mx-auto max-w-7xl px-4 py-4">
+              <div className="app-title-row">
+                <div className="app-brand">
+                  <div className="min-w-0">
+                    <Link href="/" className="block truncate text-xl font-bold text-[var(--charcoal)]">
+                      Thai Sport Commissions
+                    </Link>
+                    <p className="text-sm text-[var(--text-muted)]">Estimated - Finalized at Month-End</p>
+                  </div>
+                </div>
+                <MobileNav items={visibleNavItems} />
               </div>
-              <form action={logoutAction} className="flex items-center gap-3">
+              <form action={logoutAction} className="app-session-row">
                 {user ? (
-                  <div className="text-right text-sm">
+                  <div className="user-chip text-right text-sm">
                     <p className="font-semibold text-[var(--charcoal)]">{user.displayName}</p>
                     <p className="text-[var(--text-muted)]">{roleLabel(user.role)}</p>
                   </div>
@@ -62,10 +84,10 @@ export default async function RootLayout({
                 </button>
               </form>
             </div>
-            <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-3">
-              {[...navItems, ...(user?.role === "ADMINISTRATOR" ? adminNavItems : [])].map(([label, href]) => (
-                <Link key={href} href={href} className="nav-link">
-                  {label}
+            <nav className="desktop-nav mx-auto max-w-7xl gap-1 overflow-x-auto px-4 pb-3">
+              {visibleNavItems.map((item) => (
+                <Link key={item.href} href={item.href} className={item.active ? "nav-link nav-link-active" : "nav-link"}>
+                  {item.label}
                 </Link>
               ))}
             </nav>
@@ -75,4 +97,8 @@ export default async function RootLayout({
       </body>
     </html>
   );
+}
+
+function isActivePath(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }

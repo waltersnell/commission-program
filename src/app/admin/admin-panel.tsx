@@ -10,7 +10,7 @@ export function AdminPanel({ title, children }: { title: string; children: React
     <section className="card p-4">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 text-left"
+        className="admin-panel-trigger"
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => setOpen((current) => !current)}

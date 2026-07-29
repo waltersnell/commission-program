@@ -20,13 +20,13 @@ export default async function SalesPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <div className="space-y-5">
+    <div className="page-shell">
       <div>
         <h1 className="page-title">Membership Sales</h1>
         <p className="text-[var(--text-muted)]">Pending sales wait for administrator approval before they count toward final commission.</p>
       </div>
       {canSeeAll ? (
-        <form className="card grid gap-3 p-4 md:grid-cols-6">
+        <form className="card card-soft grid gap-3 p-4 md:grid-cols-6">
           <input className="field" type="month" name="month" defaultValue={scalar(params.month) ?? monthKey()} />
           <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
             <option value="">All locations</option>
@@ -49,7 +49,7 @@ export default async function SalesPage({ searchParams }: PageProps) {
           <button className="button-primary" type="submit">Filter</button>
         </form>
       ) : (
-        <form className="card flex flex-wrap items-end gap-3 p-4">
+        <form className="card card-soft flex flex-wrap items-end gap-3 p-4">
           <label className="grid gap-1">
             <span className="text-sm font-semibold">Month</span>
             <input className="field" type="month" name="month" defaultValue={scalar(params.month) ?? monthKey()} />
@@ -101,7 +101,7 @@ export default async function SalesPage({ searchParams }: PageProps) {
             </tbody>
           </table>
         </div>
-        {sales.length === 0 ? <p className="py-8 text-center text-[var(--text-muted)]">No membership sales match these filters.</p> : null}
+        {sales.length === 0 ? <p className="empty-state mt-4">No membership sales match these filters.</p> : null}
       </section>
     </div>
   );

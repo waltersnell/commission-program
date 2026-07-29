@@ -28,7 +28,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
   const error = scalar(params.error);
 
   return (
-    <div className="space-y-5">
+    <div className="page-shell">
       <div>
         <h1 className="page-title">Administration</h1>
         <p className="text-[var(--text-muted)]">Manage local users, staff jobs, and commission settings.</p>

@@ -20,7 +20,7 @@ export function CrmStepsEditor({ steps }: { steps: CrmStep[] }) {
         return (
           <div key={step.id} className="rounded-[8px] border border-[var(--border)] p-3">
             <button
-              className="flex w-full items-center justify-between gap-3 text-left font-semibold"
+              className="admin-panel-trigger font-semibold"
               type="button"
               onClick={() => setOpenKey(isOpen ? null : step.key)}
             >

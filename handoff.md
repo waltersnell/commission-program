@@ -6,9 +6,25 @@ Last updated: 2026-07-29
 
 The app is a local Next.js/TypeScript/Prisma SQLite commission tracker for Thai Sport Bodyworks. It has login protection, local user management, administrator-managed commissionable staff, first-time client intake, opportunities, membership sales, commission summaries, and month-end flows.
 
-Latest in-progress flow: Dashboard and opportunity workflow updates for the active month.
+Latest in-progress flow: Hallmark-guided UI improvements for front desk speed and responsive technical use.
 
-- Dashboard title now shows `Leaderboard` followed by the current date.
+- Installed and used the Hallmark skill from `nutlope/hallmark`.
+- Added durable design system files: `design.md`, `tokens.css`, `.hallmark/preflight.json`, and `.hallmark/log.json`.
+- Audience/tone/use-case decisions: front desk is primary, adding first-time clients is the fastest workflow, tone is technical/operational, and desktop/iPad/mobile must all work well.
+- Menu structure and route labels are intentionally unchanged.
+- Login now shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, ranked by credited membership sales.
+- App shell now uses the Hallmark token system, local Geist font files from the installed Next package, active nav styling, mobile hamburger navigation at 768 px or less, no `TS` mark, and consistent focus/button/input states. The mobile nav uses explicit `768px/769px` CSS breakpoints so the full desktop menu is forced off on mobile.
+- Mobile header now puts the hamburger on the right side of the app name, with user information and logout on the row below.
+- The UI palette is now light blue-grey instead of the earlier green-leaning paper/accent colors.
+- Administration panel headers and CRM step headers use a dedicated touch-friendly trigger so mobile taps open editing panels reliably.
+- Dashboard uses the same Workbench app rhythm with compact metric cards, tokenized surfaces, thicker panel outlines, more panel spacing, `Dashboard` as the page title, Recent Activity above Estimated Commissions, and Estimated Commissions sorted by Front Desk/Sales highest commission then Therapists highest commission.
+- Add First Time Client now focuses the first field and keeps the Create opportunity / Sold Membership action bar sticky for faster entry.
+- Opportunity list highlight colors are tokenized; opportunity detail now shows clear success messages for completed tasks, recorded sales, and closed opportunities.
+- Sales, Commissions, Month-End, Admin, and Forgot Password share the updated page shell/card rhythm.
+
+Previous implemented flow: Dashboard and opportunity workflow updates for the active month.
+
+- Dashboard title previously showed `Leaderboard` followed by the current date; the Hallmark UI pass changed the page title to `Dashboard` and moved the date into supporting copy.
 - Dashboard Estimated Commissions lists all active staff and estimates commissions from both pending and approved sales.
 - Add First Time Client captures `Collected By` and saves an intake submit timestamp on the opportunity.
 - Open Opportunities defaults to open records sorted by newest first-visit date.
@@ -43,6 +59,23 @@ Previous implemented flow: Add First Time Client has two submit paths.
 ## Files Changed Recently
 
 - `src/app/actions.ts`
+- `design.md`
+- `tokens.css`
+- `.hallmark/preflight.json`
+- `.hallmark/log.json`
+- `src/app/globals.css`
+- `src/app/layout.tsx`
+- `src/app/login/page.tsx`
+- `src/app/forgot-password/page.tsx`
+- `src/app/clients/new/page.tsx`
+- `src/app/clients/new/new-client-form.tsx`
+- `src/app/opportunities/page.tsx`
+- `src/app/opportunities/[id]/page.tsx`
+- `src/app/opportunities/[id]/next-action-card.tsx`
+- `src/app/sales/page.tsx`
+- `src/app/commissions/page.tsx`
+- `src/app/month-end/page.tsx`
+- `src/app/admin/page.tsx`
 - `src/app/page.tsx`
 - `src/app/admin/admin-panel.tsx`
 - `src/app/admin/crm-steps-editor.tsx`
@@ -74,6 +107,21 @@ npm run build
 
 The production build needs to run outside the sandbox because Turbopack binds a local port during CSS processing.
 
+Latest UI verification on 2026-07-29:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+Additional smoke checks against the running dev server confirmed:
+
+- `/login` renders `Thai Sport Commissions`, `Sign in`, `Top 5 Leaderboard for July 2026`, and five ranked rows before authentication.
+- `/clients/new` still redirects unauthenticated users to `/login`.
+- Dev server started at `http://localhost:3000`; LAN IP during verification was `192.168.1.87`.
+- Source verification confirmed mobile navigation switches at `<= 768px`, menu items render vertically, and admin/CRM panel triggers use touch-friendly buttons.
+
 Smoke checks against the running dev server confirmed:
 
 - `/clients/new` redirects unauthenticated users to `/login`.
@@ -82,7 +130,7 @@ Smoke checks against the running dev server confirmed:
 
 ## Known Issues
 
-- Playwright package exists in dependencies, but the browser binary is not installed, so browser automation could not run.
+- Playwright is not installed in this checkout, so visual checks used server-rendered HTML and source inspection rather than browser automation.
 - Current LAN URL may change when the network changes; re-check with `ipconfig getifaddr en0`.
 - Repository now has the initial commit `ca1ca70 Initial commission tracker state`; working tree was clean after verification on 2026-07-14.
 
@@ -103,5 +151,6 @@ docker pull ghcr.io/waltersnell/commission-program:latest
 ## Next Steps
 
 - Manually test the full Add First Time Client flow on the target device.
+- Review the Hallmark UI changes on desktop, iPad, and mobile before any production deploy.
 - Decide whether Sold Membership should always award full first-visit credit immediately, even when support closer is selected, or keep split approval.
 - Push the GitHub Actions workflow to `main`, then confirm the Docker image publishes in GitHub Actions and Packages.

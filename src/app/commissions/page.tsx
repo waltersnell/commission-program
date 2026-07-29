@@ -17,12 +17,12 @@ export default async function CommissionsPage({ searchParams }: PageProps) {
   const summary = await getCommissionSummary(month, canSeeAll ? null : visibleStaff?.id ?? "__no_matching_staff__");
 
   return (
-    <div className="space-y-5">
+    <div className="page-shell">
       <div>
         <h1 className="page-title">Commission Progress</h1>
         <p className="text-[var(--text-muted)]">Estimated - Finalized at Month-End. Pending sales wait for administrator approval before they count.</p>
       </div>
-      <form className="card flex flex-wrap items-end gap-3 p-4">
+      <form className="card card-soft flex flex-wrap items-end gap-3 p-4">
         <label className="grid gap-1">
           <span className="text-sm font-semibold">Month</span>
           <input className="field" type="month" name="month" defaultValue={month} />
@@ -52,6 +52,7 @@ export default async function CommissionsPage({ searchParams }: PageProps) {
           </article>
         ))}
       </section>
+      {summary.length === 0 ? <p className="empty-state">No commission records match this month.</p> : null}
     </div>
   );
 }

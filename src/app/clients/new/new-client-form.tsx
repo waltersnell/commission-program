@@ -109,7 +109,7 @@ export function NewClientForm({
       ) : null}
       <label className="grid gap-1">
         <span className="text-sm font-semibold">Client first name</span>
-        <input className="field" name="firstName" defaultValue={state.values.firstName} aria-invalid={Boolean(fieldErrors.firstName)} required />
+        <input className="field" name="firstName" defaultValue={state.values.firstName} aria-invalid={Boolean(fieldErrors.firstName)} required autoFocus />
         <FieldError message={fieldErrors.firstName} />
       </label>
       <label className="grid gap-1">
@@ -257,7 +257,7 @@ export function NewClientForm({
           <span className="text-sm font-semibold">Continue despite possible duplicate</span>
         </label>
       ) : null}
-      <div className="flex flex-col gap-3 md:col-span-2 md:flex-row">
+      <div className="form-action-bar md:col-span-2">
         <button className="button-primary" type="submit" name="intent" value="createOpportunity">
           Create opportunity
         </button>

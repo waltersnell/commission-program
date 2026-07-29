@@ -21,6 +21,9 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
   }
 
   const error = scalar(query.error);
+  const taskCompleted = scalar(query.task) === "completed";
+  const saleRecorded = scalar(query.sale) === "1";
+  const closed = scalar(query.closed) === "1";
   const canClose = canManage(user?.role ?? "");
   const nextAction = getOpportunityNextAction({
     interestLevel: opportunity.interestLevel,
@@ -37,12 +40,18 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
   });
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="page-title">{opportunity.client.firstName} {opportunity.client.lastName}</h1>
-        <p className="text-[var(--text-muted)]">{opportunity.location.name} - {opportunity.client.phoneDisplay}</p>
+    <div className="page-shell">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{opportunity.client.firstName} {opportunity.client.lastName}</h1>
+          <p className="text-[var(--text-muted)]">{opportunity.location.name} - {opportunity.client.phoneDisplay}</p>
+        </div>
+        <span className="badge badge-orange">{opportunity.interestLevel}</span>
       </div>
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
+      {taskCompleted ? <p className="message border-[var(--teal)]">Task completed. The next action is updated.</p> : null}
+      {saleRecorded ? <p className="message border-[var(--teal)]">Membership sale recorded and sent for approval.</p> : null}
+      {closed ? <p className="message border-[var(--teal)]">Opportunity closed.</p> : null}
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="card p-4">

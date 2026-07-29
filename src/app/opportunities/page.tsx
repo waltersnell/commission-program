@@ -21,8 +21,8 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="page-shell">
+      <div className="page-header">
         <div>
           <h1 className="page-title">Open Opportunities</h1>
           <p className="text-[var(--text-muted)]">
@@ -35,7 +35,7 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
       </div>
 
       {isAdmin ? (
-        <form className="card grid gap-3 p-4 md:grid-cols-4">
+        <form className="card card-soft grid gap-3 p-4 md:grid-cols-4">
           <input className="field" name="search" placeholder="Search name or phone" defaultValue={scalar(params.search) ?? ""} />
           <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
             <option value="">All locations</option>
@@ -66,7 +66,7 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
             <tbody>
               {rows.map((opportunity) => {
                 return (
-                  <tr key={opportunity.id} className={opportunity.daysOpen >= 14 ? "bg-[#fff8f3]" : opportunity.daysOpen >= 7 ? "bg-[#fffaf6]" : ""}>
+                  <tr key={opportunity.id} className={opportunity.daysOpen >= 14 ? "row-highlight-warn" : opportunity.daysOpen >= 7 ? "row-highlight-soft" : ""}>
                     <td>
                       <Link href={`/opportunities/${opportunity.id}`} className="font-semibold text-[var(--teal)]">
                         {opportunity.client.firstName} {opportunity.client.lastName}
@@ -91,7 +91,7 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
             </tbody>
           </table>
         </div>
-        {rows.length === 0 ? <p className="py-8 text-center text-[var(--text-muted)]">No opportunities match these filters.</p> : null}
+        {rows.length === 0 ? <p className="empty-state mt-4">No opportunities match these filters.</p> : null}
         <div className="mt-4 flex items-center justify-between text-sm text-[var(--text-muted)]">
           <span>Page {page} of {pageCount}</span>
           <div className="flex gap-2">

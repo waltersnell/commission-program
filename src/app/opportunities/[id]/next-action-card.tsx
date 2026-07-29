@@ -39,7 +39,7 @@ export function NextActionCard({
   }
 
   return (
-    <section className="card p-4">
+    <section className="card card-soft p-4">
       <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="section-title">Next Action</h2>
@@ -65,18 +65,18 @@ export function NextActionCard({
             onChange={(event) => setMessage(event.target.value)}
           />
         </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <button
             className="button-secondary"
             type="button"
             onClick={copyMessage}
           >
-            Copy SMS
+            {copyStatus === "Copied" ? "Copied" : "Copy SMS"}
           </button>
           <button className="button-primary" type="submit" disabled={!canComplete}>
             Task Completed
           </button>
-          {copyStatus ? <span className="self-center text-sm font-semibold text-[var(--teal)]">{copyStatus}</span> : null}
+          {copyStatus && copyStatus !== "Copied" ? <span className="self-center text-sm font-semibold text-[var(--teal)]">{copyStatus}</span> : null}
         </div>
       </form>
     </section>

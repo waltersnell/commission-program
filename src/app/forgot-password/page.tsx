@@ -31,7 +31,7 @@ export default async function ForgotPasswordPage({ searchParams }: PageProps) {
             <span className="text-sm font-semibold">Confirm new password</span>
             <input className="field" name="confirmPassword" type="password" autoComplete="new-password" required />
           </label>
-          <button className="button-primary" type="submit">Save new password</button>
+          <button className="button-primary" type="submit">Save password</button>
         </form>
         <Link className="mt-4 inline-flex text-sm font-semibold text-[var(--teal)]" href="/login">
           Back to login

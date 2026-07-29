@@ -1,0 +1,16 @@
+{
+  "date": "2026-07-29",
+  "framework": "Next.js 16 App Router",
+  "styling": "Tailwind v4 via src/app/globals.css",
+  "font_stack": "Existing Poppins token with no package import; redesign switches to Geist token stack with system fallback.",
+  "palette": "Existing teal alias, orange, charcoal custom properties; redesigned as OKLCH tokens anchored on light blue-grey with no green paper background.",
+  "motion": "No motion library detected; motion-cut with small CSS microinteractions.",
+  "spacing": "Tailwind utility spacing plus shared CSS classes; redesigned around a 4-point Hallmark token scale.",
+  "scope": "Multi-page app redesign",
+  "preserve": [
+    "Existing menu structure and route labels",
+    "Login gate",
+    "Commission and intake business rules",
+    "Prisma and server action ownership"
+  ]
+}

@@ -14,10 +14,10 @@ export default async function NewClientPage({ searchParams }: PageProps) {
   const duplicate = scalar(params.duplicate);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="page-shell mx-auto max-w-5xl">
       <div>
         <h1 className="page-title">Add First-Time Client</h1>
-        <p className="text-[var(--text-muted)]">Create the client and open membership opportunity after first service payment.</p>
+        <p className="text-[var(--text-muted)]">Fast intake for front desk after first service payment.</p>
       </div>
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
       {duplicate && role !== "FRONT_DESK" ? (
