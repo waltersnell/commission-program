@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-07-24
+Last updated: 2026-07-29
 
 ## Current State
 
@@ -20,8 +20,9 @@ Latest in-progress flow: Dashboard and opportunity workflow updates for the acti
 - Add First Time Client validation now uses client-side checks plus `useActionState` server errors so rejected fields beep, show inline errors, and do not clear entered data.
 - Administration includes editable CRM Step templates for Initial Text Message, Final Text Message, Initial Email, Final Email, and Initial Voice Script. Each template opens for editing only after tapping that action.
 - Administration sections are collapsed by default and each panel opens/closes independently from its title row.
-- Docker support is staged with `Dockerfile`, `.dockerignore`, and `docker-compose.yml`; the container runs `prisma migrate deploy` before `next start` and uses `/app/data/prod.db` for persistent SQLite.
+- Docker support is staged with `Dockerfile`, `.dockerignore`, and `docker-compose.yml`; the image generates Prisma Client in the final runtime stage, then the container runs `prisma migrate deploy` before `next start` and uses `/app/data/prod.db` for persistent SQLite.
 - GitHub Container Registry support is staged with `.github/workflows/docker-image.yml`; pushes to `main` build and publish `ghcr.io/waltersnell/commission-program:latest`.
+- VPS source deploy hit `@prisma/client did not initialize yet` on login because the final Docker runtime stage installed dependencies fresh without generating Prisma Client. `Dockerfile` now runs `npx prisma generate` after copying the Prisma schema into the runner stage.
 - Month-End and Admin are administrator-only in navigation and direct page access.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.

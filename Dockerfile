@@ -33,10 +33,11 @@ RUN apt-get update \
   && mkdir -p /app/data
 COPY package.json package-lock.json ./
 RUN npm ci && npm cache clean --force
-ENV NODE_ENV=production
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+RUN npx prisma generate
+ENV NODE_ENV=production
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json

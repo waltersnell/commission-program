@@ -37,7 +37,7 @@ docker compose run --rm commission-program npm run docker:seed
 docker compose up
 ```
 
-The container runs `prisma migrate deploy` before `next start`. Keep `DATABASE_URL="file:/app/data/prod.db"` and mount `/app/data` as persistent storage so SQLite data survives container rebuilds.
+The Docker image generates Prisma Client during the final runtime stage, then the container runs `prisma migrate deploy` before `next start`. Keep `DATABASE_URL="file:/app/data/prod.db"` and mount `/app/data` as persistent storage so SQLite data survives container rebuilds.
 
 ## GitHub Docker Image
 
