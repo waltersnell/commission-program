@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/data";
-import { displayStatus, formatCreditBasisPoints, formatMoney } from "@/lib/format";
+import { displayStatus, formatCreditBasisPoints, formatMoney, longDateLabel } from "@/lib/format";
 
 type DashboardPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -10,11 +10,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const data = await getDashboardData();
   const params = searchParams ? await searchParams : ({} as Record<string, string | string[] | undefined>);
   const message = scalar(params.message);
-  const todayLabel = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date());
+  const todayLabel = longDateLabel();
   const sortedCommissionSummary = [...data.commissionSummary].sort(sortDashboardCommissions);
 
   return (
@@ -75,7 +71,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </section>
 
       <section className="workbench-grid">
-        <div className="card p-4">
+        <div className="card dashboard-commission-card p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="section-title">Estimated Commissions</h2>
             <Link href="/commissions" className="button-secondary">
@@ -110,13 +106,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </div>
         </div>
 
-        <div className="card p-4">
+        <div className="card dashboard-location-card p-4">
           <h2 className="section-title mb-3">Sales by Location</h2>
-          <div className="space-y-3">
+          <div className="location-progress-list">
             {data.soldByLocation.map((item) => (
-              <div key={item.code} className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+              <div key={item.code} className="location-progress-row">
                 <span className="font-semibold">{item.code}</span>
-                <span className="badge badge-teal">{item.count} approved</span>
+                <span className="mono-num font-semibold">{item.totalCount}</span>
+                <span className="badge badge-teal">{item.approvedCount} approved</span>
               </div>
             ))}
             {data.soldByLocation.length === 0 ? <p className="empty-state">No active locations are available.</p> : null}

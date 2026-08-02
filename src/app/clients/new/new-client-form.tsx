@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createClientAction } from "@/app/actions";
-import { dateInputValue } from "@/lib/format";
+import { currentDateInputValue } from "@/lib/format";
 import {
   emptyNewClientFormValues,
   initialNewClientFormState,
@@ -25,12 +25,14 @@ type Option = {
 };
 
 export function NewClientForm({
+  primaryCloserStaff,
   staff,
   therapists,
   locations,
   role,
   duplicate,
 }: {
+  primaryCloserStaff: Option[];
   staff: Option[];
   therapists: Option[];
   locations: Option[];
@@ -42,7 +44,7 @@ export function NewClientForm({
     duplicateId: duplicate,
     values: {
       ...emptyNewClientFormValues,
-      firstVisitDate: dateInputValue(new Date()),
+      firstVisitDate: currentDateInputValue(new Date()),
     },
   }), [duplicate]);
   const [state, formAction] = useActionState(createClientAction, startingState);
@@ -107,15 +109,10 @@ export function NewClientForm({
           {message}
         </div>
       ) : null}
-      <label className="grid gap-1">
-        <span className="text-sm font-semibold">Client first name</span>
-        <input className="field" name="firstName" defaultValue={state.values.firstName} aria-invalid={Boolean(fieldErrors.firstName)} required autoFocus />
-        <FieldError message={fieldErrors.firstName} />
-      </label>
-      <label className="grid gap-1">
-        <span className="text-sm font-semibold">Client last name</span>
-        <input className="field" name="lastName" defaultValue={state.values.lastName} aria-invalid={Boolean(fieldErrors.lastName)} required />
-        <FieldError message={fieldErrors.lastName} />
+      <label className="grid gap-1 md:col-span-2">
+        <span className="text-sm font-semibold">Name</span>
+        <input className="field" name="name" defaultValue={state.values.name} aria-invalid={Boolean(fieldErrors.name)} required autoFocus />
+        <FieldError message={fieldErrors.name} />
       </label>
       <label className="grid gap-1">
         <span className="text-sm font-semibold">Phone number</span>
@@ -213,10 +210,10 @@ export function NewClientForm({
         <FieldError message={fieldErrors.locationId} />
       </label>
       <label className="grid gap-1">
-        <span className="text-sm font-semibold">Proposed primary closer</span>
+        <span className="text-sm font-semibold">Primary Closer</span>
         <select className="field" name="proposedPrimaryCloserId" defaultValue={state.values.proposedPrimaryCloserId} aria-invalid={Boolean(fieldErrors.proposedPrimaryCloserId)} required>
           <option value="">Select staff</option>
-          {staff.map((person) => (
+          {primaryCloserStaff.map((person) => (
             <option key={person.id} value={person.id}>
               {person.displayName}
             </option>
@@ -225,7 +222,7 @@ export function NewClientForm({
         <FieldError message={fieldErrors.proposedPrimaryCloserId} />
       </label>
       <label className="grid gap-1">
-        <span className="text-sm font-semibold">Proposed support closer</span>
+        <span className="text-sm font-semibold">Secondary Closer</span>
         <select className="field" name="proposedSupportCloserId" defaultValue={state.values.proposedSupportCloserId} aria-invalid={Boolean(fieldErrors.proposedSupportCloserId)}>
           <option value="">None</option>
           {staff.map((person) => (

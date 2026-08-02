@@ -199,8 +199,31 @@ a {
 
 @media (min-width: 64rem) {
   .workbench-grid {
-    grid-template-columns: minmax(0, 1.1fr) minmax(20rem, 0.9fr);
+    grid-template-columns: minmax(0, 1.65fr) minmax(14rem, 0.55fr);
   }
+}
+
+.dashboard-commission-card .data-table {
+  min-width: 620px;
+}
+
+.location-progress-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.location-progress-row {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: minmax(2.5rem, 1fr) auto auto;
+  padding-block: 0 0.65rem;
+}
+
+.location-progress-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 
 .leaderboard-rank {

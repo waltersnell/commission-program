@@ -91,12 +91,13 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 
 - Login: shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, ranked by credited membership sales, then authenticates into the protected app.
 - Administrator: manage user access, commissionable staff, commission settings, and editable CRM step templates from collapsed panels that open and close individually.
-- Add First Time Client: front-desk-first intake for contact/session/client details, therapist, interest level, closer assignments, and who collected the membership conversation. The first field receives focus, action buttons stay close at hand, validation errors beep, highlight the rejected field, and keep entered data in place for correction.
+- Add First Time Client: front-desk-first intake for contact/session/client details, therapist, interest level, closer assignments, and who collected the membership conversation. The screen uses one `Name` field, then stores it in the existing first-name/last-name database columns so existing production data remains compatible. Primary Closer is limited to Front Desk, Manager, and matching Administrator staff records; Secondary Closer keeps the full active staff list. The first field receives focus, action buttons stay close at hand, validation errors beep, highlight the rejected field, and keep entered data in place for correction.
 - Create opportunity: saves the client and opportunity, then returns to Dashboard with a success message.
 - Sold Membership: saves the client and opportunity, records a same-day pending membership sale, assigns the first-visit commission credit, then returns to Dashboard with a success message.
-- Dashboard: shows active-month metrics, Recent Activity, and Estimated Commissions for all active staff using pending and approved sales. Estimated Commissions sorts Front Desk and Sales staff by highest commission first, then Therapists by highest commission.
+- Dashboard: shows active-month metrics, Recent Activity, and Estimated Commissions for all active staff using pending and approved sales. Estimated Commissions sorts Front Desk and Sales staff by highest commission first, then Therapists by highest commission. Sales by Location shows both total sold and approved sold progression.
 - Opportunities: administrators see filterable open Hot/Warm opportunities; other users see only open Hot/Warm opportunities tied to their matching commissionable staff record. Next Action is currently `Personal SMS` with Hot due first-visit +1 day and Warm due first-visit +2 days.
-- Sales and commissions: managers and administrators can review all records; front desk users see only their own sales and commissions. Pending sales do not count until an administrator approves them.
+- Sales and commissions: managers and administrators can review all records; front desk users see only their own sales and commissions. Commission Progress estimates pending plus approved sales; final Month-End commission results still use approved sales only.
+- Month-End Review: administrators see pending approvals both as individual sales and as a staff summary, so split pending memberships are visible by credited staff before approval. Final Totals still include approved sales only.
 - Opportunity detail: client information includes collection notes, and a Next Action panel provides the due date, a large editable SMS copy window, copy button with clipboard fallback, and Task Completed workflow.
 
 ## Design System
@@ -115,6 +116,8 @@ The app uses a Hallmark-guided design system recorded in `design.md` and `tokens
 SQLite is stored at `prisma/dev.db` when `DATABASE_URL="file:./dev.db"`.
 
 In Docker, SQLite is stored at `/app/data/prod.db` by default. The `docker-compose.yml` file mounts this path as the named volume `commission-program-data`.
+
+Business dates use the `America/Los_Angeles` calendar. Date-only fields such as first visits and membership sale dates are stored as stable calendar dates, while displayed timestamps and default "today/current month" values are formatted for Pacific time. Docker sets `TZ=America/Los_Angeles` as an additional safeguard.
 
 Reset and reseed:
 

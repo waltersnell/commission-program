@@ -8,7 +8,7 @@ import {
 } from "@/app/actions";
 import { redirect } from "next/navigation";
 import { getAdminData } from "@/lib/data";
-import { basisPointsToPercentInput, centsToDollarInput, displayStatus } from "@/lib/format";
+import { basisPointsToPercentInput, centsToDollarInput, displayStatus, formatDateTime } from "@/lib/format";
 import { canAdmin, roleLabel, roles, staffJobs } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 import { AdminPanel } from "./admin-panel";
@@ -163,7 +163,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
             <tbody>
               {data.auditLogs.map((log) => (
                 <tr key={log.id}>
-                  <td>{log.createdAt.toLocaleString()}</td>
+                  <td>{formatDateTime(log.createdAt)}</td>
                   <td>{displayStatus(log.actingUser)}</td>
                   <td>{displayStatus(log.action)}</td>
                   <td>{log.recordType}</td>

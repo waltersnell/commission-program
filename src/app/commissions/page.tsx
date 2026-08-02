@@ -14,13 +14,13 @@ export default async function CommissionsPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   const canSeeAll = canManage(user?.role ?? "");
   const visibleStaff = canSeeAll ? null : await findStaffForUser(user);
-  const summary = await getCommissionSummary(month, canSeeAll ? null : visibleStaff?.id ?? "__no_matching_staff__");
+  const summary = await getCommissionSummary(month, canSeeAll ? null : visibleStaff?.id ?? "__no_matching_staff__", { includePendingAsEstimated: true });
 
   return (
     <div className="page-shell">
       <div>
         <h1 className="page-title">Commission Progress</h1>
-        <p className="text-[var(--text-muted)]">Estimated - Finalized at Month-End. Pending sales wait for administrator approval before they count.</p>
+        <p className="text-[var(--text-muted)]">Estimated progress includes pending and approved sales. Final approved totals are locked at Month-End.</p>
       </div>
       <form className="card card-soft flex flex-wrap items-end gap-3 p-4">
         <label className="grid gap-1">

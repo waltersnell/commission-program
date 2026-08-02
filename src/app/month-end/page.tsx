@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { approveSplitAction, finalizeMonthAction, reopenMonthAction } from "@/app/actions";
 import { getMonthEndData } from "@/lib/data";
-import { formatCreditBasisPoints, formatMoney, monthKey } from "@/lib/format";
+import { dateInputValue, formatCreditBasisPoints, formatMoney, monthKey } from "@/lib/format";
 import { canAdmin } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 
@@ -48,6 +48,39 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
       </section>
 
       <section className="card p-4">
+        <div className="mb-3 flex flex-col gap-1">
+          <h2 className="section-title">Pending Sales by Staff</h2>
+          <p className="text-sm text-[var(--text-muted)]">Pending memberships wait for administrator approval before they move into Final Totals.</p>
+        </div>
+        {data.pendingByStaff.length > 0 ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Staff</th>
+                  <th>Pending memberships</th>
+                  <th>Pending credits</th>
+                  <th>First-visit credits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.pendingByStaff.map((row) => (
+                  <tr key={row.staffId}>
+                    <td className="font-semibold">{row.staffName}</td>
+                    <td>{row.pendingMembershipCount}</td>
+                    <td>{formatCreditBasisPoints(row.pendingCreditBasisPoints)}</td>
+                    <td>{formatCreditBasisPoints(row.pendingFirstVisitCreditBasisPoints)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="empty-state">No pending sales for this month.</p>
+        )}
+      </section>
+
+      <section className="card p-4">
         <h2 className="section-title mb-3">Pending Sales</h2>
         <div className="space-y-3">
           {data.pendingSplits.map((sale) => (
@@ -58,6 +91,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
                 <p className="text-sm text-[var(--text-muted)]">
                   {sale.finalSupportCloser ? `${sale.finalPrimaryCloser.displayName} 70% / ${sale.finalSupportCloser.displayName} 30%` : `${sale.finalPrimaryCloser.displayName} 100%`}
                 </p>
+                <p className="text-xs font-semibold text-[var(--text-muted)]">Sale date {dateInputValue(sale.membershipSaleDate)}</p>
               </div>
               <div className="flex gap-2">
                 <button className="button-primary" name="approval" value="APPROVED">Approve</button>

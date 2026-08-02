@@ -16,8 +16,7 @@ const optionalString = z.string().trim().optional().or(z.literal(""));
 
 export const clientEntrySchema = z
   .object({
-    firstName: requiredString,
-    lastName: requiredString,
+    name: requiredString,
     phone: z.string().trim().min(1, "Phone number is required."),
     email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
     firstVisitDate: requiredString,

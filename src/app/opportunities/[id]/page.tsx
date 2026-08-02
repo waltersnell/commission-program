@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { closeOpportunityAction, recordSaleAction } from "@/app/actions";
 import { getFormOptions, getOpportunity } from "@/lib/data";
-import { dateInputValue, displayStatus, formatBasisPointsPercent } from "@/lib/format";
+import { currentDateInputValue, dateInputValue, displayStatus, formatBasisPointsPercent, formatDateTime } from "@/lib/format";
 import { canManage } from "@/lib/roles";
 import { displayClientSession } from "@/lib/session-options";
 import { getCurrentUser } from "@/lib/session";
@@ -112,7 +112,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
                 <input type="hidden" name="opportunityId" value={opportunity.id} />
                 <label className="grid gap-1">
                   <span className="text-sm font-semibold">Membership sale date</span>
-                  <input className="field" type="date" name="membershipSaleDate" defaultValue={dateInputValue(new Date())} required />
+                  <input className="field" type="date" name="membershipSaleDate" defaultValue={currentDateInputValue(new Date())} required />
                 </label>
                 <label className="grid gap-1">
                   <span className="text-sm font-semibold">Membership type</span>
@@ -177,16 +177,6 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function buildPersonalSms({
