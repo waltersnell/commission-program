@@ -7,7 +7,7 @@ import {
 } from "./commission";
 import { getPrisma } from "./db";
 import { crmStepTemplates } from "./crm-steps";
-import { monthKey } from "./format";
+import { monthKey, monthRange } from "./format";
 import { canManage } from "./roles";
 
 type CurrentUser = {
@@ -17,15 +17,46 @@ type CurrentUser = {
   email?: string | null;
 };
 
+type PendingSaleForSummary = {
+  id: string;
+  isFirstVisitSale: boolean;
+  credits: {
+    staffId: string;
+    creditBasisPoints: number;
+    staff: {
+      displayName: string;
+    };
+  }[];
+};
+
+export type PendingStaffSummary = {
+  staffId: string;
+  staffName: string;
+  pendingMembershipCount: number;
+  pendingCreditBasisPoints: number;
+  pendingFirstVisitCreditBasisPoints: number;
+};
+
 export async function getFormOptions() {
   const prisma = getPrisma();
-  const [staff, therapists, locations, membershipTypes] = await Promise.all([
+  const [staff, therapists, locations, membershipTypes, adminUsers] = await Promise.all([
     prisma.staff.findMany({ where: { active: true }, orderBy: { displayName: "asc" } }),
     prisma.staff.findMany({ where: { active: true, role: "THERAPIST" }, orderBy: { displayName: "asc" } }),
     prisma.location.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.membershipType.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { active: true, role: "ADMINISTRATOR" } }),
   ]);
-  return { staff, therapists, locations, membershipTypes };
+  const adminNameCandidates = new Set(
+    adminUsers.flatMap((user) => [user.displayName, user.username, user.email ?? ""].map(normalizePersonName).filter(Boolean)),
+  );
+  const primaryCloserStaff = staff.filter(
+    (person) =>
+      person.role === "FRONT_DESK" ||
+      person.role === "MANAGER" ||
+      hasAdminNameMatch(adminNameCandidates, person.displayName) ||
+      hasAdminNameMatch(adminNameCandidates, person.firstName),
+  );
+  return { staff, primaryCloserStaff, therapists, locations, membershipTypes };
 }
 
 export async function getDashboardData(month = monthKey()) {
@@ -65,7 +96,8 @@ export async function getDashboardData(month = monthKey()) {
   const firstVisitSales = salesThisMonth.filter((sale) => sale.isFirstVisitSale).length;
   const soldByLocation = locations.map((location) => ({
     code: location.code,
-    count: salesThisMonth.filter((sale) => sale.locationId === location.id && sale.approvalStatus === "APPROVED").length,
+    totalCount: salesThisMonth.filter((sale) => sale.locationId === location.id).length,
+    approvedCount: salesThisMonth.filter((sale) => sale.locationId === location.id && sale.approvalStatus === "APPROVED").length,
   }));
 
   return {
@@ -263,13 +295,60 @@ export async function getMonthEndData(month = monthKey()) {
     getCommissionSummary(month),
     prisma.membershipSale.findMany({
       where: { ...saleMonthWhere(month), approvalStatus: "PENDING" },
-      include: { opportunity: { include: { client: true } }, finalPrimaryCloser: true, finalSupportCloser: true },
+      include: {
+        opportunity: { include: { client: true } },
+        finalPrimaryCloser: true,
+        finalSupportCloser: true,
+        credits: { include: { staff: true } },
+      },
+      orderBy: [{ membershipSaleDate: "desc" }, { createdAt: "desc" }],
     }),
     prisma.membershipOpportunity.findMany({ where: { status: "DISPUTED" }, include: { client: true } }),
     prisma.membershipOpportunity.findMany({ where: { status: "INVALID" }, include: { client: true } }),
   ]);
 
-  return { period, summary, pendingSplits, disputes, invalids };
+  return { period, summary, pendingSplits, pendingByStaff: summarizePendingSalesByStaff(pendingSplits), disputes, invalids };
+}
+
+export function summarizePendingSalesByStaff(sales: PendingSaleForSummary[]): PendingStaffSummary[] {
+  const rows = new Map<string, PendingStaffSummary>();
+
+  for (const sale of sales) {
+    const creditedStaffIds = new Set<string>();
+
+    for (const credit of sale.credits) {
+      const row = rows.get(credit.staffId) ?? {
+        staffId: credit.staffId,
+        staffName: credit.staff.displayName,
+        pendingMembershipCount: 0,
+        pendingCreditBasisPoints: 0,
+        pendingFirstVisitCreditBasisPoints: 0,
+      };
+
+      row.pendingCreditBasisPoints += credit.creditBasisPoints;
+      if (sale.isFirstVisitSale) {
+        row.pendingFirstVisitCreditBasisPoints += credit.creditBasisPoints;
+      }
+      creditedStaffIds.add(credit.staffId);
+      rows.set(credit.staffId, row);
+    }
+
+    for (const staffId of creditedStaffIds) {
+      const row = rows.get(staffId);
+      if (row) {
+        row.pendingMembershipCount += 1;
+      }
+    }
+  }
+
+  return Array.from(rows.values()).sort((a, b) => {
+    const creditDiff = b.pendingCreditBasisPoints - a.pendingCreditBasisPoints;
+    if (creditDiff !== 0) {
+      return creditDiff;
+    }
+    const saleDiff = b.pendingMembershipCount - a.pendingMembershipCount;
+    return saleDiff !== 0 ? saleDiff : a.staffName.localeCompare(b.staffName);
+  });
 }
 
 export async function getAdminData() {
@@ -331,9 +410,7 @@ export async function getSaleCreditInputs(month?: string): Promise<CommissionCre
 }
 
 export function saleMonthWhere(month: string): Prisma.MembershipSaleWhereInput {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const start = new Date(year, monthNumber - 1, 1);
-  const end = new Date(year, monthNumber, 1);
+  const { start, end } = monthRange(month);
   return {
     membershipSaleDate: {
       gte: start,
@@ -344,4 +421,15 @@ export function saleMonthWhere(month: string): Prisma.MembershipSaleWhereInput {
 
 function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizePersonName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function hasAdminNameMatch(adminNameCandidates: Set<string>, value: string) {
+  const normalized = normalizePersonName(value);
+  return Array.from(adminNameCandidates).some(
+    (candidate) => normalized.length > 0 && (candidate === normalized || candidate.startsWith(normalized) || normalized.startsWith(candidate)),
+  );
 }

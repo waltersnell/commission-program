@@ -1,3 +1,5 @@
+import { addCalendarDays, startOfCalendarDay, startOfCurrentCalendarDay } from "./format";
+
 export type OpportunityNextActionInput = {
   interestLevel: string;
   firstVisitDate: Date;
@@ -47,20 +49,14 @@ export function getNextActionAfterCompletion(input: OpportunityNextActionInput) 
 }
 
 export function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+  return addCalendarDays(date, days);
 }
 
 function nextAction(label: string, dueDate: Date | null, canComplete: boolean): OpportunityNextAction {
   return {
     label,
     dueDate,
-    isLate: dueDate ? startOfDay(new Date()).getTime() > startOfDay(dueDate).getTime() : false,
+    isLate: dueDate ? startOfCurrentCalendarDay(new Date()).getTime() > startOfCalendarDay(dueDate).getTime() : false,
     canComplete,
   };
-}
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }

@@ -9,8 +9,10 @@ import {
 } from "../src/lib/commission";
 import { saleEntrySchema } from "../src/lib/validation";
 import { clientEntrySchema } from "../src/lib/validation";
-import { toLocalDate } from "../src/lib/format";
+import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, monthRange, toLocalDate } from "../src/lib/format";
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
+import { summarizePendingSalesByStaff } from "../src/lib/data";
+import { splitClientName } from "../src/lib/client-form-state";
 
 const staffId = "staff-a";
 
@@ -123,7 +125,82 @@ describe("commission calculations", () => {
   });
 });
 
+describe("Pacific business dates", () => {
+  it("keeps the Pacific calendar date when UTC has rolled to tomorrow", () => {
+    const latePacific = new Date("2026-08-02T05:30:00.000Z");
+
+    expect(currentDateInputValue(latePacific)).toBe("2026-08-01");
+    expect(currentMonthKey(latePacific)).toBe("2026-08");
+  });
+
+  it("keeps stored date-only values stable across server timezones", () => {
+    expect(toLocalDate("2026-08-01").toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(dateInputValue(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-01");
+  });
+
+  it("builds month ranges from stored date-only calendar boundaries", () => {
+    const range = monthRange("2026-08");
+
+    expect(range.start.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("displays timestamps in Pacific time", () => {
+    expect(formatDateTime(new Date("2026-08-02T05:30:00.000Z"))).toContain("Aug 1, 2026");
+  });
+});
+
+describe("month-end pending review", () => {
+  it("summarizes pending memberships by credited staff", () => {
+    const pending = summarizePendingSalesByStaff([
+      {
+        id: "sale-one",
+        isFirstVisitSale: true,
+        credits: [
+          { staffId: "betsy", creditBasisPoints: 7000, staff: { displayName: "Betsy" } },
+          { staffId: "dennis", creditBasisPoints: 3000, staff: { displayName: "Dennis" } },
+        ],
+      },
+      {
+        id: "sale-two",
+        isFirstVisitSale: false,
+        credits: [
+          { staffId: "betsy", creditBasisPoints: 10000, staff: { displayName: "Betsy" } },
+        ],
+      },
+    ]);
+
+    expect(pending).toEqual([
+      {
+        staffId: "betsy",
+        staffName: "Betsy",
+        pendingMembershipCount: 2,
+        pendingCreditBasisPoints: 17000,
+        pendingFirstVisitCreditBasisPoints: 7000,
+      },
+      {
+        staffId: "dennis",
+        staffName: "Dennis",
+        pendingMembershipCount: 1,
+        pendingCreditBasisPoints: 3000,
+        pendingFirstVisitCreditBasisPoints: 3000,
+      },
+    ]);
+  });
+});
+
 describe("validation and locking", () => {
+  it("splits the single intake name into stored first and last name fields", () => {
+    expect(splitClientName("  Test Middle Client  ")).toEqual({
+      firstName: "Test",
+      lastName: "Middle Client",
+    });
+    expect(splitClientName("Prince")).toEqual({
+      firstName: "Prince",
+      lastName: "",
+    });
+  });
+
   it("rejects support closer matching primary closer", () => {
     const result = saleEntrySchema.safeParse({
       opportunityId: "opp",
@@ -137,8 +214,7 @@ describe("validation and locking", () => {
 
   it("requires an other session name when Other is selected", () => {
     const result = clientEntrySchema.safeParse({
-      firstName: "Test",
-      lastName: "Client",
+      name: "Test Client",
       phone: "858-555-1212",
       email: "",
       firstVisitDate: "2026-07-12",
@@ -160,8 +236,7 @@ describe("validation and locking", () => {
 
   it("accepts a listed session without an other session name", () => {
     const result = clientEntrySchema.safeParse({
-      firstName: "Test",
-      lastName: "Client",
+      name: "Test Client",
       phone: "858-555-1212",
       email: "test@example.com",
       firstVisitDate: "2026-07-12",
