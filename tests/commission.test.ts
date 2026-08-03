@@ -7,10 +7,11 @@ import {
   isFirstVisitSale,
   type CommissionCreditInput,
 } from "../src/lib/commission";
-import { saleEntrySchema } from "../src/lib/validation";
-import { clientEntrySchema } from "../src/lib/validation";
-import { toLocalDate } from "../src/lib/format";
+import { clientEntrySchema, opportunityCloserSchema, saleEntrySchema } from "../src/lib/validation";
+import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, monthRange, toLocalDate } from "../src/lib/format";
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
+import { summarizePendingSalesByStaff } from "../src/lib/data";
+import { getNavItems, isActivePath } from "../src/lib/navigation";
 
 const staffId = "staff-a";
 
@@ -123,6 +124,70 @@ describe("commission calculations", () => {
   });
 });
 
+describe("Pacific business dates", () => {
+  it("keeps the Pacific calendar date when UTC has rolled to tomorrow", () => {
+    const latePacific = new Date("2026-08-02T05:30:00.000Z");
+
+    expect(currentDateInputValue(latePacific)).toBe("2026-08-01");
+    expect(currentMonthKey(latePacific)).toBe("2026-08");
+  });
+
+  it("keeps stored date-only values stable across server timezones", () => {
+    expect(toLocalDate("2026-08-01").toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(dateInputValue(new Date("2026-08-01T00:00:00.000Z"))).toBe("2026-08-01");
+  });
+
+  it("builds month ranges from stored date-only calendar boundaries", () => {
+    const range = monthRange("2026-08");
+
+    expect(range.start.toISOString()).toBe("2026-08-01T00:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("displays timestamps in Pacific time", () => {
+    expect(formatDateTime(new Date("2026-08-02T05:30:00.000Z"))).toContain("Aug 1, 2026");
+  });
+});
+
+describe("month-end pending review", () => {
+  it("summarizes pending memberships by credited staff", () => {
+    const pending = summarizePendingSalesByStaff([
+      {
+        id: "sale-one",
+        isFirstVisitSale: true,
+        credits: [
+          { staffId: "betsy", creditBasisPoints: 7000, staff: { displayName: "Betsy" } },
+          { staffId: "dennis", creditBasisPoints: 3000, staff: { displayName: "Dennis" } },
+        ],
+      },
+      {
+        id: "sale-two",
+        isFirstVisitSale: false,
+        credits: [
+          { staffId: "betsy", creditBasisPoints: 10000, staff: { displayName: "Betsy" } },
+        ],
+      },
+    ]);
+
+    expect(pending).toEqual([
+      {
+        staffId: "betsy",
+        staffName: "Betsy",
+        pendingMembershipCount: 2,
+        pendingCreditBasisPoints: 17000,
+        pendingFirstVisitCreditBasisPoints: 7000,
+      },
+      {
+        staffId: "dennis",
+        staffName: "Dennis",
+        pendingMembershipCount: 1,
+        pendingCreditBasisPoints: 3000,
+        pendingFirstVisitCreditBasisPoints: 3000,
+      },
+    ]);
+  });
+});
+
 describe("validation and locking", () => {
   it("rejects support closer matching primary closer", () => {
     const result = saleEntrySchema.safeParse({
@@ -132,6 +197,16 @@ describe("validation and locking", () => {
       finalPrimaryCloserId: "staff",
       finalSupportCloserId: "staff",
     });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a secondary closer matching the primary closer", () => {
+    const result = opportunityCloserSchema.safeParse({
+      opportunityId: "opp",
+      proposedPrimaryCloserId: "staff",
+      proposedSupportCloserId: "staff",
+    });
+
     expect(result.success).toBe(false);
   });
 
@@ -184,6 +259,26 @@ describe("validation and locking", () => {
   it("prevents Front Desk users from editing finalized months", () => {
     expect(assertCanEditPeriod("FRONT_DESK", "FINALIZED")).toBe(false);
     expect(assertCanEditPeriod("ADMINISTRATOR", "FINALIZED")).toBe(true);
+  });
+});
+
+describe("role navigation", () => {
+  it("gives managers Month-End access without Admin", () => {
+    const labels = getNavItems("MANAGER").map((item) => item.label);
+
+    expect(labels).toContain("Month-End");
+    expect(labels).not.toContain("Admin");
+  });
+
+  it("keeps Admin visible only to administrators", () => {
+    expect(getNavItems("ADMINISTRATOR").map((item) => item.label)).toContain("Admin");
+    expect(getNavItems("FRONT_DESK").map((item) => item.label)).not.toContain("Month-End");
+  });
+
+  it("marks nested opportunity routes active without marking Dashboard active", () => {
+    expect(isActivePath("/opportunities/client-1", "/opportunities")).toBe(true);
+    expect(isActivePath("/opportunities/client-1", "/")).toBe(false);
+    expect(isActivePath("/", "/")).toBe(true);
   });
 });
 

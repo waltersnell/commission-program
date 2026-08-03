@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/data";
-import { displayStatus, formatCreditBasisPoints, formatMoney } from "@/lib/format";
+import { displayStatus, formatCreditBasisPoints, formatMoney, longDateLabel } from "@/lib/format";
 
 type DashboardPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -10,11 +10,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const data = await getDashboardData();
   const params = searchParams ? await searchParams : ({} as Record<string, string | string[] | undefined>);
   const message = scalar(params.message);
-  const todayLabel = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date());
+  const todayLabel = longDateLabel();
   const sortedCommissionSummary = [...data.commissionSummary].sort(sortDashboardCommissions);
 
   return (

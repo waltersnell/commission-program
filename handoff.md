@@ -21,6 +21,9 @@ Latest in-progress flow: Hallmark-guided UI improvements for front desk speed an
 - Add First Time Client now focuses the first field and keeps the Create opportunity / Sold Membership action bar sticky for faster entry.
 - Opportunity list highlight colors are tokenized; opportunity detail now shows clear success messages for completed tasks, recorded sales, and closed opportunities.
 - Sales, Commissions, Month-End, Admin, and Forgot Password share the updated page shell/card rhythm.
+- Timezone fix: business "today/current month" and displayed timestamps are now explicit `America/Los_Angeles`; date-only database fields remain stable calendar dates so existing production rows do not shift backward.
+- Docker and Compose set `TZ=America/Los_Angeles` as a backup, but the app code no longer depends on the container timezone for business dates.
+- Month-End Review now shows pending approvals both as individual sales and as a `Pending Sales by Staff` summary. The staff summary uses credited split rows, so a 70/30 pending membership appears for both credited staff while preserving each person's pending credit amount.
 
 Previous implemented flow: Dashboard and opportunity workflow updates for the active month.
 
@@ -39,7 +42,9 @@ Previous implemented flow: Dashboard and opportunity workflow updates for the ac
 - Docker support is staged with `Dockerfile`, `.dockerignore`, and `docker-compose.yml`; the image generates Prisma Client in the final runtime stage, then the container runs `prisma migrate deploy` before `next start` and uses `/app/data/prod.db` for persistent SQLite.
 - GitHub Container Registry support is staged with `.github/workflows/docker-image.yml`; pushes to `main` build and publish `ghcr.io/waltersnell/commission-program:latest`.
 - VPS source deploy hit `@prisma/client did not initialize yet` on login because the final Docker runtime stage installed dependencies fresh without generating Prisma Client. `Dockerfile` now runs `npx prisma generate` after copying the Prisma schema into the runner stage.
-- Month-End and Admin are administrator-only in navigation and direct page access.
+- Managers see the operating menu plus Month-End, but not Admin. Month-End is read-only for pending approval actions when viewed by a manager; administrator approval buttons remain administrator-only.
+- Opportunities now show non-admin users `My Opportunities` followed by `All Other Opportunities`. Both sections link to opportunity detail, where authenticated users can edit primary and secondary closer assignments while the opportunity is still open and unsold.
+- The active navigation state is driven by the Next 16 `proxy.ts` pathname header and shared `src/lib/navigation.ts` helpers, so nested routes highlight their parent menu item.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.
 
@@ -121,6 +126,16 @@ Additional smoke checks against the running dev server confirmed:
 - `/clients/new` still redirects unauthenticated users to `/login`.
 - Dev server started at `http://localhost:3000`; LAN IP during verification was `192.168.1.87`.
 - Source verification confirmed mobile navigation switches at `<= 768px`, menu items render vertically, and admin/CRM panel triggers use touch-friendly buttons.
+
+Latest timezone verification on 2026-08-01:
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+- Tests cover Pacific "today" when UTC has rolled to the next day, stable date-only storage, month ranges, Pacific timestamp display, and Month-End pending sales summarized by credited staff.
 
 Smoke checks against the running dev server confirmed:
 

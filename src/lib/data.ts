@@ -7,7 +7,7 @@ import {
 } from "./commission";
 import { getPrisma } from "./db";
 import { crmStepTemplates } from "./crm-steps";
-import { monthKey } from "./format";
+import { monthKey, monthRange } from "./format";
 import { canManage } from "./roles";
 
 type CurrentUser = {
@@ -15,6 +15,26 @@ type CurrentUser = {
   displayName: string;
   username: string;
   email?: string | null;
+};
+
+type PendingSaleForSummary = {
+  id: string;
+  isFirstVisitSale: boolean;
+  credits: {
+    staffId: string;
+    creditBasisPoints: number;
+    staff: {
+      displayName: string;
+    };
+  }[];
+};
+
+export type PendingStaffSummary = {
+  staffId: string;
+  staffName: string;
+  pendingMembershipCount: number;
+  pendingCreditBasisPoints: number;
+  pendingFirstVisitCreditBasisPoints: number;
 };
 
 export async function getFormOptions() {
@@ -79,7 +99,13 @@ export async function getDashboardData(month = monthKey()) {
   };
 }
 
-export async function getOpportunities(params: Record<string, string | string[] | undefined>, visibleStaffId?: string | null) {
+export type OpportunityScope = "all" | "assigned" | "other";
+
+export async function getOpportunities(
+  params: Record<string, string | string[] | undefined>,
+  visibleStaffId?: string | null,
+  scope: OpportunityScope = visibleStaffId ? "assigned" : "all",
+) {
   const prisma = getPrisma();
   const page = Number(params.page ?? 1);
   const take = 25;
@@ -88,28 +114,46 @@ export async function getOpportunities(params: Record<string, string | string[] 
   const locationId = scalar(params.locationId);
   const closerId = scalar(params.closerId);
 
+  const andFilters: Prisma.MembershipOpportunityWhereInput[] = [];
+
+  if (visibleStaffId && scope === "assigned") {
+    andFilters.push({
+      OR: [
+        { proposedPrimaryCloserId: visibleStaffId },
+        { proposedSupportCloserId: visibleStaffId },
+      ],
+    });
+  }
+  if (visibleStaffId && scope === "other") {
+    andFilters.push({
+      NOT: {
+        OR: [
+          { proposedPrimaryCloserId: visibleStaffId },
+          { proposedSupportCloserId: visibleStaffId },
+        ],
+      },
+    });
+  }
+  if (!visibleStaffId && locationId) {
+    andFilters.push({ locationId });
+  }
+  if (!visibleStaffId && closerId) {
+    andFilters.push({ proposedPrimaryCloserId: closerId });
+  }
+  if (search) {
+    andFilters.push({
+      OR: [
+        { client: { firstName: { contains: search } } },
+        { client: { lastName: { contains: search } } },
+        { client: { phoneNormalized: { contains: search.replace(/\D/g, "") } } },
+      ],
+    });
+  }
+
   const where: Prisma.MembershipOpportunityWhereInput = {
     status: "OPEN",
     interestLevel: { in: ["Hot", "Warm"] },
-    ...(visibleStaffId
-      ? {
-          OR: [
-            { proposedPrimaryCloserId: visibleStaffId },
-            { proposedSupportCloserId: visibleStaffId },
-          ],
-        }
-      : {}),
-    ...(!visibleStaffId && locationId ? { locationId } : {}),
-    ...(!visibleStaffId && closerId ? { proposedPrimaryCloserId: closerId } : {}),
-    ...(search
-      ? {
-          OR: [
-            { client: { firstName: { contains: search } } },
-            { client: { lastName: { contains: search } } },
-            { client: { phoneNormalized: { contains: search.replace(/\D/g, "") } } },
-          ],
-        }
-      : {}),
+    ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
 
   const [rows, total] = await Promise.all([
@@ -263,13 +307,60 @@ export async function getMonthEndData(month = monthKey()) {
     getCommissionSummary(month),
     prisma.membershipSale.findMany({
       where: { ...saleMonthWhere(month), approvalStatus: "PENDING" },
-      include: { opportunity: { include: { client: true } }, finalPrimaryCloser: true, finalSupportCloser: true },
+      include: {
+        opportunity: { include: { client: true } },
+        finalPrimaryCloser: true,
+        finalSupportCloser: true,
+        credits: { include: { staff: true } },
+      },
+      orderBy: [{ membershipSaleDate: "desc" }, { createdAt: "desc" }],
     }),
     prisma.membershipOpportunity.findMany({ where: { status: "DISPUTED" }, include: { client: true } }),
     prisma.membershipOpportunity.findMany({ where: { status: "INVALID" }, include: { client: true } }),
   ]);
 
-  return { period, summary, pendingSplits, disputes, invalids };
+  return { period, summary, pendingSplits, pendingByStaff: summarizePendingSalesByStaff(pendingSplits), disputes, invalids };
+}
+
+export function summarizePendingSalesByStaff(sales: PendingSaleForSummary[]): PendingStaffSummary[] {
+  const rows = new Map<string, PendingStaffSummary>();
+
+  for (const sale of sales) {
+    const creditedStaffIds = new Set<string>();
+
+    for (const credit of sale.credits) {
+      const row = rows.get(credit.staffId) ?? {
+        staffId: credit.staffId,
+        staffName: credit.staff.displayName,
+        pendingMembershipCount: 0,
+        pendingCreditBasisPoints: 0,
+        pendingFirstVisitCreditBasisPoints: 0,
+      };
+
+      row.pendingCreditBasisPoints += credit.creditBasisPoints;
+      if (sale.isFirstVisitSale) {
+        row.pendingFirstVisitCreditBasisPoints += credit.creditBasisPoints;
+      }
+      creditedStaffIds.add(credit.staffId);
+      rows.set(credit.staffId, row);
+    }
+
+    for (const staffId of creditedStaffIds) {
+      const row = rows.get(staffId);
+      if (row) {
+        row.pendingMembershipCount += 1;
+      }
+    }
+  }
+
+  return Array.from(rows.values()).sort((a, b) => {
+    const creditDiff = b.pendingCreditBasisPoints - a.pendingCreditBasisPoints;
+    if (creditDiff !== 0) {
+      return creditDiff;
+    }
+    const saleDiff = b.pendingMembershipCount - a.pendingMembershipCount;
+    return saleDiff !== 0 ? saleDiff : a.staffName.localeCompare(b.staffName);
+  });
 }
 
 export async function getAdminData() {
@@ -331,9 +422,7 @@ export async function getSaleCreditInputs(month?: string): Promise<CommissionCre
 }
 
 export function saleMonthWhere(month: string): Prisma.MembershipSaleWhereInput {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const start = new Date(year, monthNumber - 1, 1);
-  const end = new Date(year, monthNumber, 1);
+  const { start, end } = monthRange(month);
   return {
     membershipSaleDate: {
       gte: start,

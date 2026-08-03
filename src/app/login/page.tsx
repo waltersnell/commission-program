@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { loginAction } from "@/app/actions";
 import { getDashboardData } from "@/lib/data";
-import { formatCreditBasisPoints, formatMoney } from "@/lib/format";
+import { formatCreditBasisPoints, formatMoney, monthLabel } from "@/lib/format";
 import { getCurrentUser } from "@/lib/session";
 
 type PageProps = {
@@ -20,10 +20,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const message = scalar(params.message);
   const showForgot = scalar(params.showForgot) === "1";
   const userName = scalar(params.userName) ?? "";
-  const monthLabel = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
+  const leaderboardMonthLabel = monthLabel();
   const topSales = [...dashboard.commissionSummary]
     .sort((a, b) => {
       const salesDiff = b.result.totalCreditBasisPoints - a.result.totalCreditBasisPoints;
@@ -66,7 +63,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
         <section className="card card-soft p-5">
           <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="section-title">Top 5 Leaderboard for {monthLabel}</h2>
+              <h2 className="section-title">Top 5 Leaderboard for {leaderboardMonthLabel}</h2>
               <p className="text-sm text-[var(--text-muted)]">Ranked by memberships sold this month.</p>
             </div>
             <span className="badge badge-teal">{dashboard.salesThisMonth.length} total sales</span>

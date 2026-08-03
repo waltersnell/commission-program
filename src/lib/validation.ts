@@ -73,6 +73,18 @@ export const nextActionSchema = z.object({
   nextAction: z.enum(nextActionOptions, { message: "Select a next action." }),
 });
 
+export const opportunityCloserSchema = z
+  .object({
+    opportunityId: requiredString,
+    proposedPrimaryCloserId: requiredString,
+    proposedSupportCloserId: optionalString,
+  })
+  .superRefine((data, ctx) => {
+    if (data.proposedSupportCloserId && data.proposedSupportCloserId === data.proposedPrimaryCloserId) {
+      ctx.addIssue({ code: "custom", path: ["proposedSupportCloserId"], message: "Secondary closer must be different from primary closer." });
+    }
+  });
+
 export const completeOpportunityTaskSchema = z.object({
   opportunityId: requiredString,
   completedAction: requiredString,

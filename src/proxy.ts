@@ -21,6 +21,6 @@ export function proxy(request: NextRequest) {
   });
 }
 
-export const config = {
+export const proxyConfig = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

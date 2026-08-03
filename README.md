@@ -95,8 +95,10 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 - Create opportunity: saves the client and opportunity, then returns to Dashboard with a success message.
 - Sold Membership: saves the client and opportunity, records a same-day pending membership sale, assigns the first-visit commission credit, then returns to Dashboard with a success message.
 - Dashboard: shows active-month metrics, Recent Activity, and Estimated Commissions for all active staff using pending and approved sales. Estimated Commissions sorts Front Desk and Sales staff by highest commission first, then Therapists by highest commission.
-- Opportunities: administrators see filterable open Hot/Warm opportunities; other users see only open Hot/Warm opportunities tied to their matching commissionable staff record. Next Action is currently `Personal SMS` with Hot due first-visit +1 day and Warm due first-visit +2 days.
+- Opportunities: administrators see filterable open Hot/Warm opportunities; non-admin users see `My Opportunities` followed by `All Other Opportunities`, with each row linking to editable opportunity detail. Next Action is currently `Personal SMS` with Hot due first-visit +1 day and Warm due first-visit +2 days.
 - Sales and commissions: managers and administrators can review all records; front desk users see only their own sales and commissions. Pending sales do not count until an administrator approves them.
+- Month-End Review: managers and administrators can review the page. Administrators see pending approval actions while managers see pending rows read-only; split pending memberships are also summarized by credited staff before approval. Final Totals still include approved sales only.
+- Navigation: managers see the full operating menu plus Month-End, but not Admin. Administrators see Month-End and Admin. The active menu item follows the current route, including nested detail routes.
 - Opportunity detail: client information includes collection notes, and a Next Action panel provides the due date, a large editable SMS copy window, copy button with clipboard fallback, and Task Completed workflow.
 
 ## Design System
@@ -115,6 +117,8 @@ The app uses a Hallmark-guided design system recorded in `design.md` and `tokens
 SQLite is stored at `prisma/dev.db` when `DATABASE_URL="file:./dev.db"`.
 
 In Docker, SQLite is stored at `/app/data/prod.db` by default. The `docker-compose.yml` file mounts this path as the named volume `commission-program-data`.
+
+Business dates use the `America/Los_Angeles` calendar. Date-only fields such as first visits and membership sale dates are stored as stable calendar dates, while displayed timestamps and default "today/current month" values are formatted for Pacific time. Docker sets `TZ=America/Los_Angeles` as an additional safeguard.
 
 Reset and reseed:
 

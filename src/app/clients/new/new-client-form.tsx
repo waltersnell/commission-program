@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createClientAction } from "@/app/actions";
-import { dateInputValue } from "@/lib/format";
+import { currentDateInputValue } from "@/lib/format";
 import {
   emptyNewClientFormValues,
   initialNewClientFormState,
@@ -42,7 +42,7 @@ export function NewClientForm({
     duplicateId: duplicate,
     values: {
       ...emptyNewClientFormValues,
-      firstVisitDate: dateInputValue(new Date()),
+      firstVisitDate: currentDateInputValue(new Date()),
     },
   }), [duplicate]);
   const [state, formAction] = useActionState(createClientAction, startingState);

@@ -37,6 +37,7 @@ import {
   ensureRoleCanReopen,
   loginSchema,
   nextActionSchema,
+  opportunityCloserSchema,
   passwordResetSchema,
   saleEntrySchema,
   staffSchema,
@@ -294,6 +295,51 @@ export async function updateNextActionAction(formData: FormData) {
 
   revalidatePath("/opportunities");
   revalidatePath(`/opportunities/${parsed.data.opportunityId}`);
+}
+
+export async function updateOpportunityClosersAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const parsed = opportunityCloserSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/opportunities/${formData.get("opportunityId")}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the closer assignments.")}`);
+  }
+
+  const prisma = getPrisma();
+  const opportunity = await prisma.membershipOpportunity.findUnique({
+    where: { id: parsed.data.opportunityId },
+    include: { sale: true },
+  });
+  if (!opportunity) {
+    redirect(`/opportunities?error=${encodeURIComponent("Opportunity was not found.")}`);
+  }
+  if (opportunity.status !== "OPEN" || opportunity.sale) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Closer assignments can only be edited on open opportunities.")}`);
+  }
+
+  const supportId = parsed.data.proposedSupportCloserId || null;
+  await prisma.$transaction(async (tx) => {
+    await tx.membershipOpportunity.update({
+      where: { id: opportunity.id },
+      data: {
+        proposedPrimaryCloserId: parsed.data.proposedPrimaryCloserId,
+        proposedSupportCloserId: supportId,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actingUser: user.role,
+        action: "OPPORTUNITY_CLOSERS_UPDATED",
+        recordType: "MembershipOpportunity",
+        recordId: opportunity.id,
+        previousValue: `${opportunity.proposedPrimaryCloserId}/${opportunity.proposedSupportCloserId ?? ""}`,
+        newValue: `${parsed.data.proposedPrimaryCloserId}/${supportId ?? ""}`,
+      },
+    });
+  });
+
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${opportunity.id}`);
+  redirect(`/opportunities/${opportunity.id}?updated=1`);
 }
 
 export async function completeOpportunityTaskAction(formData: FormData) {

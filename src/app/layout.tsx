@@ -6,6 +6,7 @@ import localFont from "next/font/local";
 import { logoutAction } from "./actions";
 import { getCurrentUser } from "@/lib/session";
 import { roleLabel } from "@/lib/roles";
+import { getNavItems, isActivePath } from "@/lib/navigation";
 import { MobileNav } from "./mobile-nav";
 import "./globals.css";
 
@@ -13,19 +14,6 @@ export const metadata: Metadata = {
   title: "Thai Sport Commission Tracker",
   description: "Local membership commission tracking for Thai Sport Bodyworks.",
 };
-
-const navItems = [
-  ["Dashboard", "/"],
-  ["Add Client", "/clients/new"],
-  ["Opportunities", "/opportunities"],
-  ["Sales", "/sales"],
-  ["Commissions", "/commissions"],
-];
-
-const adminNavItems = [
-  ["Month-End", "/month-end"],
-  ["Admin", "/admin"],
-];
 
 const geist = localFont({
   src: "../../node_modules/next/dist/next-devtools/server/font/geist-latin.woff2",
@@ -49,10 +37,9 @@ export default async function RootLayout({
   if (pathname && !isAuthPage && !user) {
     redirect("/login");
   }
-  const visibleNavItems = [...navItems, ...(user?.role === "ADMINISTRATOR" ? adminNavItems : [])].map(([label, href]) => ({
-    label,
-    href,
-    active: isActivePath(pathname, href),
+  const visibleNavItems = getNavItems(user?.role).map((item) => ({
+    ...item,
+    active: isActivePath(pathname, item.href),
   }));
 
   return (
@@ -97,8 +84,4 @@ export default async function RootLayout({
       </body>
     </html>
   );
-}
-
-function isActivePath(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
