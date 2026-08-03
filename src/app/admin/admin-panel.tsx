@@ -2,8 +2,8 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-export function AdminPanel({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function AdminPanel({ title, children, initialOpen = false }: { title: string; children: ReactNode; initialOpen?: boolean }) {
+  const [open, setOpen] = useState(initialOpen);
   const contentId = useId();
 
   return (

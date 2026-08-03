@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-07-29
+Last updated: 2026-08-03
 
 ## Current State
 
@@ -12,7 +12,7 @@ Latest in-progress flow: Hallmark-guided UI improvements for front desk speed an
 - Added durable design system files: `design.md`, `tokens.css`, `.hallmark/preflight.json`, and `.hallmark/log.json`.
 - Audience/tone/use-case decisions: front desk is primary, adding first-time clients is the fastest workflow, tone is technical/operational, and desktop/iPad/mobile must all work well.
 - Menu structure and route labels are intentionally unchanged.
-- Login now shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, ranked by credited membership sales.
+- Login now shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, provides a visible `Forgot password?` recovery link, and preserves the entered username when a failed sign-in redirects to recovery.
 - App shell now uses the Hallmark token system, local Geist font files from the installed Next package, active nav styling, mobile hamburger navigation at 768 px or less, no `TS` mark, and consistent focus/button/input states. The mobile nav uses explicit `768px/769px` CSS breakpoints so the full desktop menu is forced off on mobile.
 - Mobile header now puts the hamburger on the right side of the app name, with user information and logout on the row below.
 - The UI palette is now light blue-grey instead of the earlier green-leaning paper/accent colors.
@@ -45,6 +45,9 @@ Previous implemented flow: Dashboard and opportunity workflow updates for the ac
 - Managers see the operating menu plus Month-End, but not Admin. Month-End is read-only for pending approval actions when viewed by a manager; administrator approval buttons remain administrator-only.
 - Opportunities now show non-admin users `My Opportunities` followed by `All Other Opportunities`. Both sections link to opportunity detail, where authenticated users can edit primary and secondary closer assignments while the opportunity is still open and unsold.
 - The active navigation state is driven by the Next 16 `proxy.ts` pathname header and shared `src/lib/navigation.ts` helpers, so nested routes highlight their parent menu item.
+- Desktop and mobile active navigation now use `usePathname()` in client navigation components, preventing the blue highlight from remaining on Dashboard after client-side route changes.
+- Closer selectors now use only active Front Desk, Manager, and Administrator assignments. An active privileged login user can keep a matching existing staff record selectable even if the old staff row has a legacy role such as Therapist.
+- Administration now has a Client Lookup panel directly above Audit History. It uses the Open Opportunities name/phone, location, and closer filters, links each result to a full editor, and provides audited update and confirmed deletion actions for the client, opportunity, follow-ups, sale, and sale credits.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.
 
@@ -83,6 +86,14 @@ Previous implemented flow: Add First Time Client has two submit paths.
 - `src/app/admin/page.tsx`
 - `src/app/page.tsx`
 - `src/app/admin/admin-panel.tsx`
+- `src/app/admin/client-record-editor.tsx`
+- `src/app/admin/delete-client-record-button.tsx`
+- `src/app/desktop-nav.tsx`
+- `src/lib/current-staff.ts`
+- `src/lib/data.ts`
+- `src/lib/roles.ts`
+- `src/lib/validation.ts`
+- `tests/commission.test.ts`
 - `src/app/admin/crm-steps-editor.tsx`
 - `src/app/clients/new/new-client-form.tsx`
 - `src/app/opportunities/[id]/next-action-card.tsx`

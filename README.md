@@ -89,8 +89,8 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 
 ## Current Workflows
 
-- Login: shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, ranked by credited membership sales, then authenticates into the protected app.
-- Administrator: manage user access, commissionable staff, commission settings, and editable CRM step templates from collapsed panels that open and close individually.
+- Login: shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, provides a visible `Forgot password?` recovery link, then authenticates into the protected app.
+- Administrator: manage user access, commissionable staff, commission settings, editable CRM step templates, and Client Lookup from collapsed panels that open and close individually. Client Lookup uses name/phone, location, and primary closer filters and allows full record editing or audited deletion.
 - Add First Time Client: front-desk-first intake for contact/session/client details, therapist, interest level, closer assignments, and who collected the membership conversation. The first field receives focus, action buttons stay close at hand, validation errors beep, highlight the rejected field, and keep entered data in place for correction.
 - Create opportunity: saves the client and opportunity, then returns to Dashboard with a success message.
 - Sold Membership: saves the client and opportunity, records a same-day pending membership sale, assigns the first-visit commission credit, then returns to Dashboard with a success message.
@@ -99,6 +99,7 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 - Sales and commissions: managers and administrators can review all records; front desk users see only their own sales and commissions. Pending sales do not count until an administrator approves them.
 - Month-End Review: managers and administrators can review the page. Administrators see pending approval actions while managers see pending rows read-only; split pending memberships are also summarized by credited staff before approval. Final Totals still include approved sales only.
 - Navigation: managers see the full operating menu plus Month-End, but not Admin. Administrators see Month-End and Admin. The active menu item follows the current route, including nested detail routes.
+- Primary and secondary closer selectors only show active Front Desk, Manager, and Administrator assignments. Existing staff records matched to active privileged users remain selectable during the transition to the role-filtered list.
 - Opportunity detail: client information includes collection notes, and a Next Action panel provides the due date, a large editable SMS copy window, copy button with clipboard fallback, and Task Completed workflow.
 
 ## Design System

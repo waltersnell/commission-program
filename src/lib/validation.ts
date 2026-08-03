@@ -14,8 +14,7 @@ import { crmStepKeys } from "./crm-steps";
 const requiredString = z.string().trim().min(1, "This field is required.");
 const optionalString = z.string().trim().optional().or(z.literal(""));
 
-export const clientEntrySchema = z
-  .object({
+const clientEntryFields = {
     firstName: requiredString,
     lastName: requiredString,
     phone: z.string().trim().min(1, "Phone number is required."),
@@ -32,8 +31,18 @@ export const clientEntrySchema = z
     proposedSupportCloserId: optionalString,
     collectedBy: z.enum(collectedByOptions, { message: "Select who collected the sale." }),
     notes: optionalString,
-  })
-  .superRefine((data, ctx) => {
+  };
+
+type ClientEntryValues = {
+  phone: string;
+  proposedPrimaryCloserId: string;
+  proposedSupportCloserId?: string;
+  sessionType: string;
+  sessionOther?: string;
+};
+
+function refineClientEntry<T extends z.ZodType<ClientEntryValues>>(schema: T) {
+  return schema.superRefine((data, ctx) => {
     const phone = normalizePhone(data.phone);
     if (phone.normalized.length !== 10) {
       ctx.addIssue({ code: "custom", path: ["phone"], message: "Enter a 10-digit US phone number." });
@@ -45,6 +54,29 @@ export const clientEntrySchema = z
       ctx.addIssue({ code: "custom", path: ["sessionOther"], message: "Enter the other session name." });
     }
   });
+}
+
+export const clientEntrySchema = refineClientEntry(z.object(clientEntryFields));
+
+export const clientRecordEditSchema = refineClientEntry(
+  z.object({
+    clientId: requiredString,
+    opportunityId: requiredString,
+    ...clientEntryFields,
+    firstVisitTherapistId: optionalString,
+    opportunityStatus: z.enum(["OPEN", "MEMBERSHIP_SOLD", "CLOSED_NO_SALE", "INVALID", "DISPUTED"] as const),
+    closureReason: optionalString,
+    closureNote: optionalString,
+    followUpStatus: requiredString,
+    followUpNotes: optionalString,
+    lastFollowUpDate: optionalString,
+    nextFollowUpDate: optionalString,
+  }),
+);
+
+export const clientRecordDeleteSchema = z.object({
+  clientId: requiredString,
+});
 
 export const saleEntrySchema = z
   .object({

@@ -6,13 +6,15 @@ import {
   updateStaffAction,
   updateUserAction,
 } from "@/app/actions";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getAdminData } from "@/lib/data";
-import { basisPointsToPercentInput, centsToDollarInput, displayStatus, formatDateTime } from "@/lib/format";
+import { getAdminData, getClientLookupData, getFormOptions } from "@/lib/data";
+import { basisPointsToPercentInput, centsToDollarInput, dateInputValue, displayStatus, formatDateTime } from "@/lib/format";
 import { canAdmin, roleLabel, roles, staffJobs } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 import { AdminPanel } from "./admin-panel";
 import { CrmStepsEditor } from "./crm-steps-editor";
+import { ClientRecordEditor } from "./client-record-editor";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -24,8 +26,14 @@ export default async function AdminPage({ searchParams }: PageProps) {
   if (!isAdmin) {
     redirect("/");
   }
-  const data = await getAdminData();
+  const [data, clientLookup, formOptions] = await Promise.all([
+    getAdminData(),
+    getClientLookupData(params),
+    getFormOptions(),
+  ]);
   const error = scalar(params.error);
+  const clientUpdated = scalar(params.clientUpdated) === "1";
+  const clientDeleted = scalar(params.clientDeleted) === "1";
 
   return (
     <div className="page-shell">
@@ -34,6 +42,8 @@ export default async function AdminPage({ searchParams }: PageProps) {
         <p className="text-[var(--text-muted)]">Manage local users, staff jobs, and commission settings.</p>
       </div>
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
+      {clientUpdated ? <p className="message border-[var(--teal)]">Client record updated.</p> : null}
+      {clientDeleted ? <p className="message border-[var(--teal)]">Client record deleted.</p> : null}
       <AdminPanel title="Create User Access">
         <form action={createUserAction} className="grid gap-3 md:grid-cols-6">
           <input className="field md:col-span-2" name="displayName" placeholder="Name" required disabled={!isAdmin} />
@@ -148,6 +158,64 @@ export default async function AdminPage({ searchParams }: PageProps) {
         </AdminPanel>
       </section>
 
+      <div id="client-editor">
+        <AdminPanel title="Client Lookup" initialOpen={Boolean(clientLookup.selected)}>
+          <div className="space-y-4">
+            <form className="card card-soft grid gap-3 p-4 md:grid-cols-4">
+              <input className="field" name="clientSearch" placeholder="Search name or phone" defaultValue={clientLookup.search ?? ""} />
+              <select className="field" name="clientLocationId" defaultValue={clientLookup.locationId ?? ""}>
+                <option value="">All locations</option>
+                {formOptions.locations.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}
+              </select>
+              <select className="field" name="clientCloserId" defaultValue={clientLookup.closerId ?? ""}>
+                <option value="">All closers</option>
+                {formOptions.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+              </select>
+              <button className="button-primary" type="submit">Find clients</button>
+            </form>
+
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>First Visit</th>
+                    <th>Location</th>
+                    <th>Primary</th>
+                    <th>Status</th>
+                    <th>Record</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientLookup.rows.map((client) => (
+                    <tr key={client.id}>
+                      <td>{client.firstName} {client.lastName}</td>
+                      <td>{dateInputValue(client.firstVisitDate)}</td>
+                      <td>{client.opportunity?.location.code ?? "-"}</td>
+                      <td>{client.opportunity?.proposedPrimaryCloser.displayName ?? "-"}</td>
+                      <td>{client.opportunity ? displayStatus(client.opportunity.status) : "-"}</td>
+                      <td>
+                        <Link className="font-semibold text-[var(--teal)]" href={clientLookupHref(clientLookup, client.id)}>
+                          Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {clientLookup.rows.length === 0 ? <p className="empty-state">No clients match these filters.</p> : null}
+
+            {clientLookup.selected ? (
+              <div className="border-t border-[var(--border)] pt-4">
+                <h3 className="section-title mb-3">Edit Client Record</h3>
+                <ClientRecordEditor client={clientLookup.selected} options={formOptions} />
+              </div>
+            ) : null}
+          </div>
+        </AdminPanel>
+      </div>
+
       <AdminPanel title="Audit History">
         <div className="table-wrap">
           <table className="data-table">
@@ -176,6 +244,18 @@ export default async function AdminPage({ searchParams }: PageProps) {
       </AdminPanel>
     </div>
   );
+}
+
+function clientLookupHref(
+  lookup: Awaited<ReturnType<typeof getClientLookupData>>,
+  clientId: string,
+) {
+  const query = new URLSearchParams();
+  if (lookup.search) query.set("clientSearch", lookup.search);
+  if (lookup.locationId) query.set("clientLocationId", lookup.locationId);
+  if (lookup.closerId) query.set("clientCloserId", lookup.closerId);
+  query.set("clientId", clientId);
+  return `/admin?${query.toString()}#client-editor`;
 }
 
 function settingInputValue(key: string, value: string) {

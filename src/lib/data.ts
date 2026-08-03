@@ -8,7 +8,8 @@ import {
 import { getPrisma } from "./db";
 import { crmStepTemplates } from "./crm-steps";
 import { monthKey, monthRange } from "./format";
-import { canManage } from "./roles";
+import { canManage, isCloserRole } from "./roles";
+import { staffMatchesUser } from "./current-staff";
 
 type CurrentUser = {
   role: string;
@@ -39,12 +40,16 @@ export type PendingStaffSummary = {
 
 export async function getFormOptions() {
   const prisma = getPrisma();
-  const [staff, therapists, locations, membershipTypes] = await Promise.all([
+  const [allStaff, users, therapists, locations, membershipTypes] = await Promise.all([
     prisma.staff.findMany({ where: { active: true }, orderBy: { displayName: "asc" } }),
+    prisma.user.findMany({ where: { active: true }, select: { displayName: true, username: true, email: true, role: true } }),
     prisma.staff.findMany({ where: { active: true, role: "THERAPIST" }, orderBy: { displayName: "asc" } }),
     prisma.location.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.membershipType.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
   ]);
+  const staff = allStaff.filter((person) =>
+    isCloserRole(person.role) || users.some((user) => isCloserRole(user.role) && staffMatchesUser(person, user)),
+  );
   return { staff, therapists, locations, membershipTypes };
 }
 
@@ -392,6 +397,54 @@ export async function getAdminData() {
     prisma.auditLog.findMany({ take: 30, orderBy: { createdAt: "desc" } }),
   ]);
   return { users, staff, locations, membershipTypes, settings, crmSteps, auditLogs };
+}
+
+export async function getClientLookupData(params: Record<string, string | string[] | undefined>) {
+  const prisma = getPrisma();
+  const search = scalar(params.clientSearch)?.trim();
+  const locationId = scalar(params.clientLocationId);
+  const closerId = scalar(params.clientCloserId);
+  const selectedId = scalar(params.clientId);
+  const opportunityFilter = locationId || closerId
+    ? {
+        ...(locationId ? { locationId } : {}),
+        ...(closerId ? { proposedPrimaryCloserId: closerId } : {}),
+      }
+    : undefined;
+  const where: Prisma.ClientWhereInput = {
+    ...(search
+      ? {
+          OR: [
+            { firstName: { contains: search } },
+            { lastName: { contains: search } },
+            { phoneNormalized: { contains: search.replace(/\D/g, "") } },
+          ],
+        }
+      : {}),
+    ...(opportunityFilter ? { opportunity: opportunityFilter } : {}),
+  };
+  const include = {
+    opportunity: {
+      include: {
+        location: true,
+        firstVisitTherapist: true,
+        proposedPrimaryCloser: true,
+        proposedSupportCloser: true,
+        sale: true,
+      },
+    },
+  } as const;
+  const [rows, selected] = await Promise.all([
+    prisma.client.findMany({
+      where,
+      take: 50,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      include,
+    }),
+    selectedId ? prisma.client.findUnique({ where: { id: selectedId }, include }) : null,
+  ]);
+
+  return { rows, selected, search, locationId, closerId };
 }
 
 export async function getSaleCreditInputs(month?: string): Promise<CommissionCreditInput[]> {

@@ -12,6 +12,7 @@ import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime,
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
 import { summarizePendingSalesByStaff } from "../src/lib/data";
 import { getNavItems, isActivePath } from "../src/lib/navigation";
+import { staffMatchesUser } from "../src/lib/current-staff";
 
 const staffId = "staff-a";
 
@@ -279,6 +280,22 @@ describe("role navigation", () => {
     expect(isActivePath("/opportunities/client-1", "/opportunities")).toBe(true);
     expect(isActivePath("/opportunities/client-1", "/")).toBe(false);
     expect(isActivePath("/", "/")).toBe(true);
+  });
+});
+
+describe("closer eligibility", () => {
+  it("matches an administrator user to an existing staff record by first name", () => {
+    expect(staffMatchesUser(
+      { displayName: "Lawani", firstName: "Lawani" },
+      { displayName: "Lawani N", username: "lawani@thaisportusa.com", email: "lawani@thaisportusa.com", role: "ADMINISTRATOR" },
+    )).toBe(true);
+  });
+
+  it("does not match a therapist user as a privileged closer", () => {
+    expect(staffMatchesUser(
+      { displayName: "Alice", firstName: "Alice" },
+      { displayName: "Alice", username: "alice@thaisportusa.com", email: "alice@thaisportusa.com", role: "THERAPIST" },
+    )).toBe(false);
   });
 });
 

@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
-
-type NavItem = {
-  href: string;
-  label: string;
-  active: boolean;
-};
+import { isActivePath, type NavItem } from "@/lib/navigation";
 
 export function MobileNav({ items }: { items: NavItem[] }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname() ?? "";
 
   return (
     <div className="mobile-nav">
@@ -31,7 +28,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
             <Link
               key={item.href}
               href={item.href}
-              className={item.active ? "nav-link nav-link-active" : "nav-link"}
+              className={isActivePath(pathname, item.href) ? "nav-link nav-link-active" : "nav-link"}
               onClick={() => setOpen(false)}
             >
               {item.label}
