@@ -15,23 +15,21 @@ const requiredString = z.string().trim().min(1, "This field is required.");
 const optionalString = z.string().trim().optional().or(z.literal(""));
 
 const clientEntryFields = {
-    firstName: requiredString,
-    lastName: requiredString,
-    phone: z.string().trim().min(1, "Phone number is required."),
-    email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
-    firstVisitDate: requiredString,
-    sessionType: z.enum(firstTimeClientSessions, { message: "Select a session." }),
-    sessionOther: optionalString,
-    clientType: z.enum(firstTimeClientTypes, { message: "Select a client type." }),
-    primaryIssue: z.enum(firstTimePrimaryIssues, { message: "Select a primary issue." }),
-    locationId: requiredString,
-    firstVisitTherapistId: requiredString,
-    interestLevel: z.enum(interestLevels, { message: "Select an interest level." }),
-    proposedPrimaryCloserId: requiredString,
-    proposedSupportCloserId: optionalString,
-    collectedBy: z.enum(collectedByOptions, { message: "Select who collected the sale." }),
-    notes: optionalString,
-  };
+  phone: z.string().trim().min(1, "Phone number is required."),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
+  firstVisitDate: requiredString,
+  sessionType: z.enum(firstTimeClientSessions, { message: "Select a session." }),
+  sessionOther: optionalString,
+  clientType: z.enum(firstTimeClientTypes, { message: "Select a client type." }),
+  primaryIssue: z.enum(firstTimePrimaryIssues, { message: "Select a primary issue." }),
+  locationId: requiredString,
+  firstVisitTherapistId: requiredString,
+  interestLevel: z.enum(interestLevels, { message: "Select an interest level." }),
+  proposedPrimaryCloserId: requiredString,
+  proposedSupportCloserId: optionalString,
+  collectedBy: z.enum(collectedByOptions, { message: "Select who collected the sale." }),
+  notes: optionalString,
+};
 
 type ClientEntryValues = {
   phone: string;
@@ -56,12 +54,14 @@ function refineClientEntry<T extends z.ZodType<ClientEntryValues>>(schema: T) {
   });
 }
 
-export const clientEntrySchema = refineClientEntry(z.object(clientEntryFields));
+export const clientEntrySchema = refineClientEntry(z.object({ name: requiredString, ...clientEntryFields }));
 
 export const clientRecordEditSchema = refineClientEntry(
   z.object({
     clientId: requiredString,
     opportunityId: requiredString,
+    firstName: requiredString,
+    lastName: requiredString,
     ...clientEntryFields,
     firstVisitTherapistId: optionalString,
     opportunityStatus: z.enum(["OPEN", "MEMBERSHIP_SOLD", "CLOSED_NO_SALE", "INVALID", "DISPUTED"] as const),

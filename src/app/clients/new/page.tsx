@@ -8,7 +8,7 @@ type PageProps = {
 
 export default async function NewClientPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const { staff, therapists, locations } = await getFormOptions();
+  const { staff, primaryCloserStaff, therapists, locations } = await getFormOptions();
   const role = await getCurrentRole();
   const error = scalar(params.error);
   const duplicate = scalar(params.duplicate);
@@ -25,6 +25,7 @@ export default async function NewClientPage({ searchParams }: PageProps) {
       ) : null}
 
       <NewClientForm
+        primaryCloserStaff={primaryCloserStaff.map((person) => ({ id: person.id, displayName: person.displayName }))}
         staff={staff.map((person) => ({ id: person.id, displayName: person.displayName }))}
         therapists={therapists.map((person) => ({ id: person.id, displayName: person.displayName }))}
         locations={locations.map((location) => ({ id: location.id, code: location.code, name: location.name }))}

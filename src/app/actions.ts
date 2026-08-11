@@ -51,6 +51,7 @@ import { getNextActionAfterCompletion } from "@/lib/opportunity-next-action";
 import {
   initialNewClientFormState,
   newClientValuesFromFormData,
+  splitClientName,
   type NewClientFormState,
   type NewClientFormValues,
 } from "@/lib/client-form-state";
@@ -122,12 +123,13 @@ export async function createClientAction(_state: NewClientFormState = initialNew
   const role = user.role;
   const soldMembership = formData.get("intent") === "soldMembership";
   const values = newClientValuesFromFormData(formData);
-  const parsed = clientEntrySchema.safeParse(Object.fromEntries(formData));
+  const parsed = clientEntrySchema.safeParse({ ...Object.fromEntries(formData), name: values.name });
   if (!parsed.success) {
     return clientFormError(values, parsed.error.issues[0]?.message ?? "Check the form.", fieldErrorsFromIssues(parsed.error.issues));
   }
 
   const data = parsed.data;
+  const clientName = splitClientName(data.name);
   const phone = normalizePhone(data.phone);
   const firstVisitDate = toLocalDate(data.firstVisitDate);
   const submittedAt = new Date();
@@ -137,8 +139,8 @@ export async function createClientAction(_state: NewClientFormState = initialNew
       OR: [
         { phoneNormalized: phone.normalized },
         {
-          firstName: data.firstName,
-          lastName: data.lastName,
+          firstName: clientName.firstName,
+          lastName: clientName.lastName,
           firstVisitDate,
         },
       ],
@@ -178,8 +180,8 @@ export async function createClientAction(_state: NewClientFormState = initialNew
   await prisma.$transaction(async (tx) => {
     const client = await tx.client.create({
       data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
+        firstName: clientName.firstName,
+        lastName: clientName.lastName,
         phoneNormalized: phone.normalized,
         phoneDisplay: phone.display,
         email: data.email || null,

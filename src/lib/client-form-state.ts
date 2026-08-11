@@ -1,6 +1,5 @@
 export type NewClientFormValues = {
-  firstName: string;
-  lastName: string;
+  name: string;
   phone: string;
   email: string;
   firstVisitDate: string;
@@ -27,8 +26,7 @@ export type NewClientFormState = {
 };
 
 export const emptyNewClientFormValues: NewClientFormValues = {
-  firstName: "",
-  lastName: "",
+  name: "",
   phone: "",
   email: "",
   firstVisitDate: "",
@@ -55,8 +53,7 @@ export const initialNewClientFormState: NewClientFormState = {
 
 export function newClientValuesFromFormData(formData: FormData): NewClientFormValues {
   return {
-    firstName: stringValue(formData, "firstName"),
-    lastName: stringValue(formData, "lastName"),
+    name: clientNameFromFormData(formData),
     phone: stringValue(formData, "phone"),
     email: stringValue(formData, "email"),
     firstVisitDate: stringValue(formData, "firstVisitDate"),
@@ -73,6 +70,25 @@ export function newClientValuesFromFormData(formData: FormData): NewClientFormVa
     notes: stringValue(formData, "notes"),
     allowDuplicate: stringValue(formData, "allowDuplicate"),
   };
+}
+
+export function splitClientName(name: string) {
+  const normalized = name.trim().replace(/\s+/g, " ");
+  const [firstName = "", ...rest] = normalized.split(" ");
+  return {
+    firstName,
+    lastName: rest.join(" "),
+  };
+}
+
+function clientNameFromFormData(formData: FormData) {
+  const name = stringValue(formData, "name");
+  if (name) {
+    return name;
+  }
+  return [String(formData.get("firstName") ?? ""), String(formData.get("lastName") ?? "")]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function stringValue(formData: FormData, key: keyof NewClientFormValues) {

@@ -14,6 +14,7 @@ import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/l
 import { summarizePendingSalesByStaff } from "../src/lib/data";
 import { getNavItems, isActivePath } from "../src/lib/navigation";
 import { staffMatchesUser } from "../src/lib/current-staff";
+import { splitClientName } from "../src/lib/client-form-state";
 
 const staffId = "staff-a";
 
@@ -198,6 +199,17 @@ describe("month-end pending review", () => {
 });
 
 describe("validation and locking", () => {
+  it("splits the single intake name into stored first and last name fields", () => {
+    expect(splitClientName("  Test Middle Client  ")).toEqual({
+      firstName: "Test",
+      lastName: "Middle Client",
+    });
+    expect(splitClientName("Prince")).toEqual({
+      firstName: "Prince",
+      lastName: "",
+    });
+  });
+
   it("rejects support closer matching primary closer", () => {
     const result = saleEntrySchema.safeParse({
       opportunityId: "opp",
@@ -221,8 +233,7 @@ describe("validation and locking", () => {
 
   it("requires an other session name when Other is selected", () => {
     const result = clientEntrySchema.safeParse({
-      firstName: "Test",
-      lastName: "Client",
+      name: "Test Client",
       phone: "858-555-1212",
       email: "",
       firstVisitDate: "2026-07-12",
@@ -244,8 +255,7 @@ describe("validation and locking", () => {
 
   it("accepts a listed session without an other session name", () => {
     const result = clientEntrySchema.safeParse({
-      firstName: "Test",
-      lastName: "Client",
+      name: "Test Client",
       phone: "858-555-1212",
       email: "test@example.com",
       firstVisitDate: "2026-07-12",

@@ -71,7 +71,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </section>
 
       <section className="workbench-grid">
-        <div className="card p-4">
+        <div className="card dashboard-commission-card p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 className="section-title">Estimated Commissions</h2>
@@ -109,13 +109,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </div>
         </div>
 
-        <div className="card p-4">
+        <div className="card dashboard-location-card p-4">
           <h2 className="section-title mb-3">Sales by Location</h2>
-          <div className="space-y-3">
+          <div className="location-progress-list">
             {data.soldByLocation.map((item) => (
-              <div key={item.code} className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+              <div key={item.code} className="location-progress-row">
                 <span className="font-semibold">{item.code}</span>
-                <span className="badge badge-teal">{item.count} total</span>
+                <span className="mono-num font-semibold">{item.totalCount}</span>
+                <span className="badge badge-teal">{item.approvedCount} approved</span>
               </div>
             ))}
             {data.soldByLocation.length === 0 ? <p className="empty-state">No active locations are available.</p> : null}

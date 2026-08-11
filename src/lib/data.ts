@@ -50,7 +50,8 @@ export async function getFormOptions() {
   const staff = allStaff.filter((person) =>
     isCloserRole(person.role) || users.some((user) => isCloserRole(user.role) && staffMatchesUser(person, user)),
   );
-  return { staff, therapists, locations, membershipTypes };
+  const primaryCloserStaff = staff;
+  return { staff, primaryCloserStaff, therapists, locations, membershipTypes };
 }
 
 export async function getDashboardData(month = monthKey()) {
@@ -92,7 +93,8 @@ export async function getDashboardData(month = monthKey()) {
   const firstVisitSales = salesThisMonth.filter((sale) => sale.isFirstVisitSale).length;
   const soldByLocation = locations.map((location) => ({
     code: location.code,
-    count: salesThisMonth.filter((sale) => sale.locationId === location.id).length,
+    totalCount: salesThisMonth.filter((sale) => sale.locationId === location.id).length,
+    approvedCount: salesThisMonth.filter((sale) => sale.locationId === location.id && sale.approvalStatus === "APPROVED").length,
   }));
 
   return {

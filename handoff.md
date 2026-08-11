@@ -18,7 +18,11 @@ Latest in-progress flow: Hallmark-guided UI improvements for front desk speed an
 - The UI palette is now light blue-grey instead of the earlier green-leaning paper/accent colors.
 - Administration panel headers and CRM step headers use a dedicated touch-friendly trigger so mobile taps open editing panels reliably.
 - Dashboard uses the same Workbench app rhythm with compact metric cards, tokenized surfaces, thicker panel outlines, more panel spacing, `Dashboard` as the page title, Recent Activity above Estimated Commissions, and Estimated Commissions sorted by Front Desk/Sales highest commission then Therapists highest commission.
+- Dashboard Estimated Commissions and login leaderboard use estimated pending-plus-approved sales. Month-End final totals still use approved-only sales.
+- Dashboard Sales by Location now uses a compact progression view with both total sold and approved sold.
 - Add First Time Client now focuses the first field and keeps the Create opportunity / Sold Membership action bar sticky for faster entry.
+- Add First Time Client now shows a single `Name` field. The submit path splits that value into the existing `Client.firstName` and `Client.lastName` columns, so this is production-data compatible and does not require a database migration.
+- Add First Time Client Primary and Secondary Closer choices are filtered to active Front Desk, Manager, and Administrator assignments, including matching legacy staff rows during the role transition.
 - Opportunity list highlight colors are tokenized; opportunity detail now shows clear success messages for completed tasks, recorded sales, and closed opportunities.
 - Sales, Commissions, Month-End, Admin, and Forgot Password share the updated page shell/card rhythm.
 - Timezone fix: business "today/current month" and displayed timestamps are now explicit `America/Los_Angeles`; date-only database fields remain stable calendar dates so existing production rows do not shift backward.
@@ -153,6 +157,29 @@ npm run build
 
 - Tests cover Pacific "today" when UTC has rolled to the next day, stable date-only storage, month ranges, Pacific timestamp display, and Month-End pending sales summarized by credited staff.
 
+Latest name-field verification on 2026-08-02:
+
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+```
+
+- Authenticated `/clients/new` smoke check returned `200`, rendered the single `Name` input, removed `Client first name` / `Client last name`, and kept `Create opportunity` plus `Sold Membership`.
+- Sandboxed `npm run build` still fails on the known Turbopack local port-binding restriction before app compilation completes.
+
+Latest correction verification on 2026-08-02:
+
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+```
+
+- `getFormOptions()` smoke check confirmed closer options include Front Desk/Manager plus administrator-matched staff rows.
+- `getDashboardData()` smoke check confirmed location rows include `totalCount` and `approvedCount`, and estimated leaderboard data includes pending sales.
+- Authenticated smoke checks returned `200` for `/clients/new`, `/`, and `/commissions`; `/login` returned `200`.
+- Rendered HTML checks confirmed Primary Closer excludes ordinary therapists, login leaderboard copy says pending and approved sales are included, and dashboard location rows render the compact total/approved progression.
 Smoke checks against the running dev server confirmed:
 
 - `/clients/new` redirects unauthenticated users to `/login`.
