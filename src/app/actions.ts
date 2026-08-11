@@ -28,6 +28,8 @@ import {
 } from "@/lib/session";
 import {
   clientEntrySchema,
+  clientRecordDeleteSchema,
+  clientRecordEditSchema,
   closeOpportunitySchema,
   completeOpportunityTaskSchema,
   commissionSettingSchema,
@@ -37,6 +39,7 @@ import {
   ensureRoleCanReopen,
   loginSchema,
   nextActionSchema,
+  opportunityCloserSchema,
   passwordResetSchema,
   saleEntrySchema,
   staffSchema,
@@ -75,7 +78,7 @@ export async function loginAction(formData: FormData) {
   }
 
   if (!user.passwordHash || !verifyPassword(parsed.data.password, user.passwordHash)) {
-    redirect(`/login?error=${encodeURIComponent("Incorrect Password")}&showForgot=1&userName=${encodeURIComponent(user.username)}`);
+    redirect(`/login?error=${encodeURIComponent("Incorrect Password")}&userName=${encodeURIComponent(user.username)}`);
   }
 
   await setCurrentUserSession(user);
@@ -296,6 +299,51 @@ export async function updateNextActionAction(formData: FormData) {
 
   revalidatePath("/opportunities");
   revalidatePath(`/opportunities/${parsed.data.opportunityId}`);
+}
+
+export async function updateOpportunityClosersAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const parsed = opportunityCloserSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/opportunities/${formData.get("opportunityId")}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the closer assignments.")}`);
+  }
+
+  const prisma = getPrisma();
+  const opportunity = await prisma.membershipOpportunity.findUnique({
+    where: { id: parsed.data.opportunityId },
+    include: { sale: true },
+  });
+  if (!opportunity) {
+    redirect(`/opportunities?error=${encodeURIComponent("Opportunity was not found.")}`);
+  }
+  if (opportunity.status !== "OPEN" || opportunity.sale) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Closer assignments can only be edited on open opportunities.")}`);
+  }
+
+  const supportId = parsed.data.proposedSupportCloserId || null;
+  await prisma.$transaction(async (tx) => {
+    await tx.membershipOpportunity.update({
+      where: { id: opportunity.id },
+      data: {
+        proposedPrimaryCloserId: parsed.data.proposedPrimaryCloserId,
+        proposedSupportCloserId: supportId,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actingUser: user.role,
+        action: "OPPORTUNITY_CLOSERS_UPDATED",
+        recordType: "MembershipOpportunity",
+        recordId: opportunity.id,
+        previousValue: `${opportunity.proposedPrimaryCloserId}/${opportunity.proposedSupportCloserId ?? ""}`,
+        newValue: `${parsed.data.proposedPrimaryCloserId}/${supportId ?? ""}`,
+      },
+    });
+  });
+
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${opportunity.id}`);
+  redirect(`/opportunities/${opportunity.id}?updated=1`);
 }
 
 export async function completeOpportunityTaskAction(formData: FormData) {
@@ -582,7 +630,7 @@ export async function createStaffAction(formData: FormData) {
   requireAdmin(role);
   const parsed = staffSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
   }
   const data = parsed.data;
   const staff = await getPrisma().staff.create({
@@ -596,7 +644,7 @@ export async function createStaffAction(formData: FormData) {
   });
   await auditAdminChange(role, "STAFF_CREATED", "Staff", staff.id, staff.displayName);
   revalidatePath("/admin");
-  redirect("/admin?staff=created");
+  redirect("/admin?section=commission&staff=created");
 }
 
 export async function updateStaffAction(formData: FormData) {
@@ -605,7 +653,7 @@ export async function updateStaffAction(formData: FormData) {
   requireAdmin(role);
   const parsed = staffSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success || !parsed.data.staffId) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.success ? "Missing staff record." : parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent(parsed.success ? "Missing staff record." : parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
   }
   const data = parsed.data;
   const staff = await getPrisma().staff.update({
@@ -620,7 +668,7 @@ export async function updateStaffAction(formData: FormData) {
   });
   await auditAdminChange(role, "STAFF_EDITED", "Staff", staff.id, staff.displayName);
   revalidatePath("/admin");
-  redirect("/admin?staff=updated");
+  redirect("/admin?section=commission&staff=updated");
 }
 
 export async function updateCommissionSettingAction(formData: FormData) {
@@ -629,25 +677,25 @@ export async function updateCommissionSettingAction(formData: FormData) {
   requireAdmin(role);
   const parsed = commissionSettingSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the commission setting.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the commission setting.")}`);
   }
 
   const prisma = getPrisma();
   const setting = await prisma.commissionSetting.findUnique({ where: { id: parsed.data.settingId } });
   if (!setting) {
-    redirect(`/admin?error=${encodeURIComponent("Commission setting was not found.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent("Commission setting was not found.")}`);
   }
 
   const normalizedValue = normalizeSettingValue(setting.key, parsed.data.value);
   if (!normalizedValue) {
-    redirect(`/admin?error=${encodeURIComponent("Enter a valid setting value.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent("Enter a valid setting value.")}`);
   }
 
   if (setting.key === "primarySplitBasisPoints" || setting.key === "supportSplitBasisPoints") {
     const siblingKey = setting.key === "primarySplitBasisPoints" ? "supportSplitBasisPoints" : "primarySplitBasisPoints";
     const sibling = await prisma.commissionSetting.findUnique({ where: { key: siblingKey } });
     if (sibling && Number(normalizedValue) + Number(sibling.value) !== 10000) {
-      redirect(`/admin?error=${encodeURIComponent("Primary and support split percentages must equal 100%.")}`);
+      redirect(`/admin?section=commission&error=${encodeURIComponent("Primary and support split percentages must equal 100%.")}`);
     }
   }
 
@@ -659,7 +707,7 @@ export async function updateCommissionSettingAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/commissions");
   revalidatePath("/month-end");
-  redirect("/admin?settings=updated");
+  redirect("/admin?section=commission&settings=updated");
 }
 
 export async function updateCrmStepTemplateAction(formData: FormData) {
@@ -668,12 +716,12 @@ export async function updateCrmStepTemplateAction(formData: FormData) {
   requireAdmin(role);
   const parsed = crmStepTemplateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the CRM step.")}`);
+    redirect(`/admin?section=other&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the CRM step.")}`);
   }
 
   const existing = await getPrisma().crmStepTemplate.findUnique({ where: { id: parsed.data.stepId } });
   if (!existing || existing.key !== parsed.data.key) {
-    redirect(`/admin?error=${encodeURIComponent("CRM step was not found.")}`);
+    redirect(`/admin?section=other&error=${encodeURIComponent("CRM step was not found.")}`);
   }
 
   const step = await getPrisma().crmStepTemplate.update({
@@ -682,7 +730,131 @@ export async function updateCrmStepTemplateAction(formData: FormData) {
   });
   await auditAdminChange(role, "CRM_STEP_TEMPLATE_EDITED", "CrmStepTemplate", step.id, step.label);
   revalidatePath("/admin");
-  redirect("/admin?crm=updated");
+  redirect("/admin?section=other&crm=updated");
+}
+
+export async function updateClientRecordAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const role = user.role;
+  requireAdmin(role);
+  const parsed = clientRecordEditSchema.safeParse(Object.fromEntries(formData));
+  const clientId = String(formData.get("clientId") ?? "");
+  if (!parsed.success) {
+    redirect(adminClientRedirect(clientId, `error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the client record.")}`));
+  }
+
+  const data = parsed.data;
+  const prisma = getPrisma();
+  const existing = await prisma.client.findUnique({
+    where: { id: data.clientId },
+    include: { opportunity: { include: { sale: true } } },
+  });
+  if (!existing || !existing.opportunity || existing.opportunity.id !== data.opportunityId) {
+    redirect(adminClientRedirect(data.clientId, `error=${encodeURIComponent("Client record was not found.")}`));
+  }
+
+  const phone = normalizePhone(data.phone);
+  const firstVisitDate = toLocalDate(data.firstVisitDate);
+  const lastFollowUpDate = optionalDate(data.lastFollowUpDate);
+  const nextFollowUpDate = optionalDate(data.nextFollowUpDate);
+  await prisma.$transaction(async (tx) => {
+    await tx.client.update({
+      where: { id: data.clientId },
+      data: {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phoneNormalized: phone.normalized,
+        phoneDisplay: phone.display,
+        email: data.email || null,
+        firstVisitDate,
+        sessionType: data.sessionType,
+        sessionOther: data.sessionType === "Other" ? data.sessionOther || null : null,
+        clientType: data.clientType,
+        primaryIssue: data.primaryIssue,
+        notes: data.notes || null,
+      },
+    });
+    await tx.membershipOpportunity.update({
+      where: { id: data.opportunityId },
+      data: {
+        locationId: data.locationId,
+        firstVisitTherapistId: data.firstVisitTherapistId || null,
+        interestLevel: data.interestLevel,
+        proposedPrimaryCloserId: data.proposedPrimaryCloserId,
+        proposedSupportCloserId: data.proposedSupportCloserId || null,
+        collectedBy: data.collectedBy,
+        status: data.opportunityStatus,
+        closureReason: data.closureReason || null,
+        closureNote: data.closureNote || null,
+        followUpStatus: data.followUpStatus,
+        followUpNotes: data.followUpNotes || null,
+        lastFollowUpDate,
+        nextFollowUpDate,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actingUser: role,
+        action: "CLIENT_RECORD_UPDATED",
+        recordType: "Client",
+        recordId: data.clientId,
+        previousValue: `${existing.firstName} ${existing.lastName}`,
+        newValue: `${data.firstName} ${data.lastName}`,
+      },
+    });
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${data.opportunityId}`);
+  revalidatePath("/");
+  revalidatePath("/sales");
+  redirect(adminClientRedirect(data.clientId, "clientUpdated=1"));
+}
+
+export async function deleteClientRecordAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const role = user.role;
+  requireAdmin(role);
+  const parsed = clientRecordDeleteSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?section=clients&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Client record was not found.")}`);
+  }
+
+  const prisma = getPrisma();
+  const client = await prisma.client.findUnique({
+    where: { id: parsed.data.clientId },
+    include: { opportunity: { include: { sale: true } } },
+  });
+  if (!client) {
+    redirect(`/admin?section=clients&error=${encodeURIComponent("Client record was not found.")}`);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.auditLog.create({
+      data: {
+        actingUser: role,
+        action: "CLIENT_RECORD_DELETED",
+        recordType: "Client",
+        recordId: client.id,
+        newValue: `${client.firstName} ${client.lastName}`,
+      },
+    });
+    if (client.opportunity?.sale) {
+      await tx.saleCredit.deleteMany({ where: { saleId: client.opportunity.sale.id } });
+      await tx.membershipSale.delete({ where: { id: client.opportunity.sale.id } });
+    }
+    if (client.opportunity) {
+      await tx.membershipOpportunity.delete({ where: { id: client.opportunity.id } });
+    }
+    await tx.client.delete({ where: { id: client.id } });
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/opportunities");
+  revalidatePath("/");
+  revalidatePath("/sales");
+  redirect("/admin?section=clients&clientDeleted=1");
 }
 
 export async function createUserAction(formData: FormData) {
@@ -691,7 +863,7 @@ export async function createUserAction(formData: FormData) {
   requireAdmin(role);
   const parsed = userCreateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
   }
   const data = parsed.data;
   const phone = normalizePhone(data.phone);
@@ -700,7 +872,7 @@ export async function createUserAction(formData: FormData) {
     where: { OR: [{ email }, { username: email }] },
   });
   if (existing) {
-    redirect(`/admin?error=${encodeURIComponent("A user with that email already exists.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent("A user with that email already exists.")}`);
   }
   const user = await getPrisma().user.create({
     data: {
@@ -716,7 +888,7 @@ export async function createUserAction(formData: FormData) {
   });
   await auditAdminChange(role, "USER_CREATED", "User", user.id, user.email ?? user.username);
   revalidatePath("/admin");
-  redirect("/admin?user=created");
+  redirect("/admin?section=users&user=created");
 }
 
 export async function updateUserAction(formData: FormData) {
@@ -725,7 +897,7 @@ export async function updateUserAction(formData: FormData) {
   requireAdmin(role);
   const parsed = userEditSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
   }
   const data = parsed.data;
   const phone = normalizePhone(data.phone);
@@ -734,7 +906,7 @@ export async function updateUserAction(formData: FormData) {
     where: { OR: [{ email }, { username: email }], NOT: { id: data.userId } },
   });
   if (existing) {
-    redirect(`/admin?error=${encodeURIComponent("A different user already has that email.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent("A different user already has that email.")}`);
   }
   const user = await getPrisma().user.update({
     where: { id: data.userId },
@@ -751,7 +923,7 @@ export async function updateUserAction(formData: FormData) {
   });
   await auditAdminChange(role, "USER_EDITED", "User", user.id, user.email ?? user.username);
   revalidatePath("/admin");
-  redirect("/admin?user=updated");
+  redirect("/admin?section=users&user=updated");
 }
 
 export async function deactivateUserAction(formData: FormData) {
@@ -760,7 +932,7 @@ export async function deactivateUserAction(formData: FormData) {
   requireAdmin(role);
   const parsed = userDeactivateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Missing user.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Missing user.")}`);
   }
   const user = await getPrisma().user.update({
     where: { id: parsed.data.userId },
@@ -768,7 +940,7 @@ export async function deactivateUserAction(formData: FormData) {
   });
   await auditAdminChange(role, "USER_DEACTIVATED", "User", user.id, user.email ?? user.username);
   revalidatePath("/admin");
-  redirect("/admin?user=deactivated");
+  redirect("/admin?section=users&user=deactivated");
 }
 
 function requireAdmin(role: string) {
@@ -828,4 +1000,12 @@ async function auditAdminChange(role: string, action: string, recordType: string
       newValue,
     },
   });
+}
+
+function optionalDate(value: string | undefined) {
+  return value ? toLocalDate(value) : null;
+}
+
+function adminClientRedirect(clientId: string, query: string) {
+  return `/admin?section=clients&clientId=${encodeURIComponent(clientId)}&${query}#client-editor`;
 }

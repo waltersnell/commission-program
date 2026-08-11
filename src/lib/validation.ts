@@ -14,25 +14,33 @@ import { crmStepKeys } from "./crm-steps";
 const requiredString = z.string().trim().min(1, "This field is required.");
 const optionalString = z.string().trim().optional().or(z.literal(""));
 
-export const clientEntrySchema = z
-  .object({
-    name: requiredString,
-    phone: z.string().trim().min(1, "Phone number is required."),
-    email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
-    firstVisitDate: requiredString,
-    sessionType: z.enum(firstTimeClientSessions, { message: "Select a session." }),
-    sessionOther: optionalString,
-    clientType: z.enum(firstTimeClientTypes, { message: "Select a client type." }),
-    primaryIssue: z.enum(firstTimePrimaryIssues, { message: "Select a primary issue." }),
-    locationId: requiredString,
-    firstVisitTherapistId: requiredString,
-    interestLevel: z.enum(interestLevels, { message: "Select an interest level." }),
-    proposedPrimaryCloserId: requiredString,
-    proposedSupportCloserId: optionalString,
-    collectedBy: z.enum(collectedByOptions, { message: "Select who collected the sale." }),
-    notes: optionalString,
-  })
-  .superRefine((data, ctx) => {
+const clientEntryFields = {
+  phone: z.string().trim().min(1, "Phone number is required."),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
+  firstVisitDate: requiredString,
+  sessionType: z.enum(firstTimeClientSessions, { message: "Select a session." }),
+  sessionOther: optionalString,
+  clientType: z.enum(firstTimeClientTypes, { message: "Select a client type." }),
+  primaryIssue: z.enum(firstTimePrimaryIssues, { message: "Select a primary issue." }),
+  locationId: requiredString,
+  firstVisitTherapistId: requiredString,
+  interestLevel: z.enum(interestLevels, { message: "Select an interest level." }),
+  proposedPrimaryCloserId: requiredString,
+  proposedSupportCloserId: optionalString,
+  collectedBy: z.enum(collectedByOptions, { message: "Select who collected the sale." }),
+  notes: optionalString,
+};
+
+type ClientEntryValues = {
+  phone: string;
+  proposedPrimaryCloserId: string;
+  proposedSupportCloserId?: string;
+  sessionType: string;
+  sessionOther?: string;
+};
+
+function refineClientEntry<T extends z.ZodType<ClientEntryValues>>(schema: T) {
+  return schema.superRefine((data, ctx) => {
     const phone = normalizePhone(data.phone);
     if (phone.normalized.length !== 10) {
       ctx.addIssue({ code: "custom", path: ["phone"], message: "Enter a 10-digit US phone number." });
@@ -44,6 +52,31 @@ export const clientEntrySchema = z
       ctx.addIssue({ code: "custom", path: ["sessionOther"], message: "Enter the other session name." });
     }
   });
+}
+
+export const clientEntrySchema = refineClientEntry(z.object({ name: requiredString, ...clientEntryFields }));
+
+export const clientRecordEditSchema = refineClientEntry(
+  z.object({
+    clientId: requiredString,
+    opportunityId: requiredString,
+    firstName: requiredString,
+    lastName: requiredString,
+    ...clientEntryFields,
+    firstVisitTherapistId: optionalString,
+    opportunityStatus: z.enum(["OPEN", "MEMBERSHIP_SOLD", "CLOSED_NO_SALE", "INVALID", "DISPUTED"] as const),
+    closureReason: optionalString,
+    closureNote: optionalString,
+    followUpStatus: requiredString,
+    followUpNotes: optionalString,
+    lastFollowUpDate: optionalString,
+    nextFollowUpDate: optionalString,
+  }),
+);
+
+export const clientRecordDeleteSchema = z.object({
+  clientId: requiredString,
+});
 
 export const saleEntrySchema = z
   .object({
@@ -71,6 +104,18 @@ export const nextActionSchema = z.object({
   opportunityId: requiredString,
   nextAction: z.enum(nextActionOptions, { message: "Select a next action." }),
 });
+
+export const opportunityCloserSchema = z
+  .object({
+    opportunityId: requiredString,
+    proposedPrimaryCloserId: requiredString,
+    proposedSupportCloserId: optionalString,
+  })
+  .superRefine((data, ctx) => {
+    if (data.proposedSupportCloserId && data.proposedSupportCloserId === data.proposedPrimaryCloserId) {
+      ctx.addIssue({ code: "custom", path: ["proposedSupportCloserId"], message: "Secondary closer must be different from primary closer." });
+    }
+  });
 
 export const completeOpportunityTaskSchema = z.object({
   opportunityId: requiredString,

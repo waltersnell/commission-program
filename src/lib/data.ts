@@ -8,7 +8,8 @@ import {
 import { getPrisma } from "./db";
 import { crmStepTemplates } from "./crm-steps";
 import { monthKey, monthRange } from "./format";
-import { canManage } from "./roles";
+import { canManage, isCloserRole } from "./roles";
+import { staffMatchesUser } from "./current-staff";
 
 type CurrentUser = {
   role: string;
@@ -39,23 +40,17 @@ export type PendingStaffSummary = {
 
 export async function getFormOptions() {
   const prisma = getPrisma();
-  const [staff, therapists, locations, membershipTypes, adminUsers] = await Promise.all([
+  const [allStaff, users, therapists, locations, membershipTypes] = await Promise.all([
     prisma.staff.findMany({ where: { active: true }, orderBy: { displayName: "asc" } }),
+    prisma.user.findMany({ where: { active: true }, select: { displayName: true, username: true, email: true, role: true } }),
     prisma.staff.findMany({ where: { active: true, role: "THERAPIST" }, orderBy: { displayName: "asc" } }),
     prisma.location.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     prisma.membershipType.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    prisma.user.findMany({ where: { active: true, role: "ADMINISTRATOR" } }),
   ]);
-  const adminNameCandidates = new Set(
-    adminUsers.flatMap((user) => [user.displayName, user.username, user.email ?? ""].map(normalizePersonName).filter(Boolean)),
+  const staff = allStaff.filter((person) =>
+    isCloserRole(person.role) || users.some((user) => isCloserRole(user.role) && staffMatchesUser(person, user)),
   );
-  const primaryCloserStaff = staff.filter(
-    (person) =>
-      person.role === "FRONT_DESK" ||
-      person.role === "MANAGER" ||
-      hasAdminNameMatch(adminNameCandidates, person.displayName) ||
-      hasAdminNameMatch(adminNameCandidates, person.firstName),
-  );
+  const primaryCloserStaff = staff;
   return { staff, primaryCloserStaff, therapists, locations, membershipTypes };
 }
 
@@ -63,7 +58,9 @@ export async function getDashboardData(month = monthKey()) {
   const prisma = getPrisma();
   const [openCount, pendingApprovals, recentOpportunities, salesThisMonth, locations, commissionSummary] = await Promise.all([
     prisma.membershipOpportunity.count({ where: { status: "OPEN" } }),
-    prisma.membershipSale.count({ where: { approvalStatus: "PENDING" } }),
+    prisma.membershipSale.count({
+      where: { ...saleMonthWhere(month), approvalStatus: "PENDING" },
+    }),
     prisma.membershipOpportunity.findMany({
       take: 8,
       orderBy: { createdAt: "desc" },
@@ -111,44 +108,68 @@ export async function getDashboardData(month = monthKey()) {
   };
 }
 
-export async function getOpportunities(params: Record<string, string | string[] | undefined>, visibleStaffId?: string | null) {
+export type OpportunityScope = "all" | "assigned" | "other";
+
+export async function getOpportunities(
+  params: Record<string, string | string[] | undefined>,
+  visibleStaffId?: string | null,
+  scope: OpportunityScope = visibleStaffId ? "assigned" : "all",
+) {
   const prisma = getPrisma();
   const page = Number(params.page ?? 1);
   const take = 25;
+  const paginate = !visibleStaffId;
   const skip = (Math.max(page, 1) - 1) * take;
   const search = scalar(params.search);
   const locationId = scalar(params.locationId);
   const closerId = scalar(params.closerId);
 
+  const andFilters: Prisma.MembershipOpportunityWhereInput[] = [];
+
+  if (visibleStaffId && scope === "assigned") {
+    andFilters.push({
+      OR: [
+        { proposedPrimaryCloserId: visibleStaffId },
+        { proposedSupportCloserId: visibleStaffId },
+      ],
+    });
+  }
+  if (visibleStaffId && scope === "other") {
+    andFilters.push({
+      NOT: {
+        OR: [
+          { proposedPrimaryCloserId: visibleStaffId },
+          { proposedSupportCloserId: visibleStaffId },
+        ],
+      },
+    });
+  }
+  if (!visibleStaffId && locationId) {
+    andFilters.push({ locationId });
+  }
+  if (!visibleStaffId && closerId) {
+    andFilters.push({ proposedPrimaryCloserId: closerId });
+  }
+  if (search) {
+    andFilters.push({
+      OR: [
+        { client: { firstName: { contains: search } } },
+        { client: { lastName: { contains: search } } },
+        { client: { phoneNormalized: { contains: search.replace(/\D/g, "") } } },
+      ],
+    });
+  }
+
   const where: Prisma.MembershipOpportunityWhereInput = {
     status: "OPEN",
     interestLevel: { in: ["Hot", "Warm"] },
-    ...(visibleStaffId
-      ? {
-          OR: [
-            { proposedPrimaryCloserId: visibleStaffId },
-            { proposedSupportCloserId: visibleStaffId },
-          ],
-        }
-      : {}),
-    ...(!visibleStaffId && locationId ? { locationId } : {}),
-    ...(!visibleStaffId && closerId ? { proposedPrimaryCloserId: closerId } : {}),
-    ...(search
-      ? {
-          OR: [
-            { client: { firstName: { contains: search } } },
-            { client: { lastName: { contains: search } } },
-            { client: { phoneNormalized: { contains: search.replace(/\D/g, "") } } },
-          ],
-        }
-      : {}),
+    ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
 
   const [rows, total] = await Promise.all([
     prisma.membershipOpportunity.findMany({
       where,
-      take,
-      skip,
+      ...(paginate ? { take, skip } : {}),
       orderBy: [{ client: { firstVisitDate: "desc" } }, { createdAt: "desc" }],
       include: {
         client: true,
@@ -167,7 +188,12 @@ export async function getOpportunities(params: Record<string, string | string[] 
     daysOpen: Math.max(0, Math.floor((now - row.createdAt.getTime()) / 86_400_000)),
   }));
 
-  return { rows: rowsWithDaysOpen, total, page, pageCount: Math.max(1, Math.ceil(total / take)) };
+  return {
+    rows: rowsWithDaysOpen,
+    total,
+    page: paginate ? page : 1,
+    pageCount: paginate ? Math.max(1, Math.ceil(total / take)) : 1,
+  };
 }
 
 export async function getOpportunity(id: string) {
@@ -382,6 +408,54 @@ export async function getAdminData() {
   return { users, staff, locations, membershipTypes, settings, crmSteps, auditLogs };
 }
 
+export async function getClientLookupData(params: Record<string, string | string[] | undefined>) {
+  const prisma = getPrisma();
+  const search = scalar(params.clientSearch)?.trim();
+  const locationId = scalar(params.clientLocationId);
+  const closerId = scalar(params.clientCloserId);
+  const selectedId = scalar(params.clientId);
+  const opportunityFilter = locationId || closerId
+    ? {
+        ...(locationId ? { locationId } : {}),
+        ...(closerId ? { proposedPrimaryCloserId: closerId } : {}),
+      }
+    : undefined;
+  const where: Prisma.ClientWhereInput = {
+    ...(search
+      ? {
+          OR: [
+            { firstName: { contains: search } },
+            { lastName: { contains: search } },
+            { phoneNormalized: { contains: search.replace(/\D/g, "") } },
+          ],
+        }
+      : {}),
+    ...(opportunityFilter ? { opportunity: opportunityFilter } : {}),
+  };
+  const include = {
+    opportunity: {
+      include: {
+        location: true,
+        firstVisitTherapist: true,
+        proposedPrimaryCloser: true,
+        proposedSupportCloser: true,
+        sale: true,
+      },
+    },
+  } as const;
+  const [rows, selected] = await Promise.all([
+    prisma.client.findMany({
+      where,
+      take: 50,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      include,
+    }),
+    selectedId ? prisma.client.findUnique({ where: { id: selectedId }, include }) : null,
+  ]);
+
+  return { rows, selected, search, locationId, closerId };
+}
+
 export async function getSaleCreditInputs(month?: string): Promise<CommissionCreditInput[]> {
   const prisma = getPrisma();
   const sales = await prisma.membershipSale.findMany({
@@ -421,15 +495,4 @@ export function saleMonthWhere(month: string): Prisma.MembershipSaleWhereInput {
 
 function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function normalizePersonName(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function hasAdminNameMatch(adminNameCandidates: Set<string>, value: string) {
-  const normalized = normalizePersonName(value);
-  return Array.from(adminNameCandidates).some(
-    (candidate) => normalized.length > 0 && (candidate === normalized || candidate.startsWith(normalized) || normalized.startsWith(candidate)),
-  );
 }

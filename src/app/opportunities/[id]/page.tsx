@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { closeOpportunityAction, recordSaleAction } from "@/app/actions";
+import { closeOpportunityAction, recordSaleAction, updateOpportunityClosersAction } from "@/app/actions";
 import { getFormOptions, getOpportunity } from "@/lib/data";
 import { currentDateInputValue, dateInputValue, displayStatus, formatBasisPointsPercent, formatDateTime } from "@/lib/format";
 import { canManage } from "@/lib/roles";
@@ -24,6 +24,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
   const taskCompleted = scalar(query.task) === "completed";
   const saleRecorded = scalar(query.sale) === "1";
   const closed = scalar(query.closed) === "1";
+  const updated = scalar(query.updated) === "1";
   const canClose = canManage(user?.role ?? "");
   const nextAction = getOpportunityNextAction({
     interestLevel: opportunity.interestLevel,
@@ -52,6 +53,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
       {taskCompleted ? <p className="message border-[var(--teal)]">Task completed. The next action is updated.</p> : null}
       {saleRecorded ? <p className="message border-[var(--teal)]">Membership sale recorded and sent for approval.</p> : null}
       {closed ? <p className="message border-[var(--teal)]">Opportunity closed.</p> : null}
+      {updated ? <p className="message border-[var(--teal)]">Closer assignments updated.</p> : null}
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="card p-4">
@@ -83,6 +85,31 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
               canComplete={nextAction.canComplete}
               defaultMessage={smsMessage}
             />
+          ) : null}
+
+          {!opportunity.sale && opportunity.status === "OPEN" ? (
+            <div className="card p-4">
+              <h2 className="section-title mb-3">Opportunity Assignment</h2>
+              <form action={updateOpportunityClosersAction} className="grid gap-3 md:grid-cols-2">
+                <input type="hidden" name="opportunityId" value={opportunity.id} />
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold">Primary closer</span>
+                  <select className="field" name="proposedPrimaryCloserId" defaultValue={opportunity.proposedPrimaryCloserId} required>
+                    {options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold">Secondary closer</span>
+                  <select className="field" name="proposedSupportCloserId" defaultValue={opportunity.proposedSupportCloserId ?? ""}>
+                    <option value="">None</option>
+                    {options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+                  </select>
+                </label>
+                <div className="md:col-span-2">
+                  <button className="button-primary" type="submit">Save assignment</button>
+                </div>
+              </form>
+            </div>
           ) : null}
 
           <div className="card p-4">

@@ -6,6 +6,8 @@ import localFont from "next/font/local";
 import { logoutAction } from "./actions";
 import { getCurrentUser } from "@/lib/session";
 import { roleLabel } from "@/lib/roles";
+import { getNavItems } from "@/lib/navigation";
+import { DesktopNav } from "./desktop-nav";
 import { MobileNav } from "./mobile-nav";
 import "./globals.css";
 
@@ -13,19 +15,6 @@ export const metadata: Metadata = {
   title: "Thai Sport Commission Tracker",
   description: "Local membership commission tracking for Thai Sport Bodyworks.",
 };
-
-const navItems = [
-  ["Dashboard", "/"],
-  ["Add Client", "/clients/new"],
-  ["Opportunities", "/opportunities"],
-  ["Sales", "/sales"],
-  ["Commissions", "/commissions"],
-];
-
-const adminNavItems = [
-  ["Month-End", "/month-end"],
-  ["Admin", "/admin"],
-];
 
 const geist = localFont({
   src: "../../node_modules/next/dist/next-devtools/server/font/geist-latin.woff2",
@@ -49,15 +38,11 @@ export default async function RootLayout({
   if (pathname && !isAuthPage && !user) {
     redirect("/login");
   }
-  const visibleNavItems = [...navItems, ...(user?.role === "ADMINISTRATOR" ? adminNavItems : [])].map(([label, href]) => ({
-    label,
-    href,
-    active: isActivePath(pathname, href),
-  }));
+  const visibleNavItems = getNavItems(user?.role);
 
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full`}>
-      <body className="min-h-full">
+      <body className="min-h-full" suppressHydrationWarning>
         {!isAuthPage ? (
           <header className="app-header">
             <div className="app-header-inner mx-auto max-w-7xl px-4 py-4">
@@ -84,21 +69,11 @@ export default async function RootLayout({
                 </button>
               </form>
             </div>
-            <nav className="desktop-nav mx-auto max-w-7xl gap-1 overflow-x-auto px-4 pb-3">
-              {visibleNavItems.map((item) => (
-                <Link key={item.href} href={item.href} className={item.active ? "nav-link nav-link-active" : "nav-link"}>
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <DesktopNav items={visibleNavItems} />
           </header>
         ) : null}
         <main className={isAuthPage ? "min-h-screen px-4 py-8" : "mx-auto w-full max-w-7xl px-4 py-6"}>{children}</main>
       </body>
     </html>
   );
-}
-
-function isActivePath(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }

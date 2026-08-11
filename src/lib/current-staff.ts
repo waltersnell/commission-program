@@ -1,5 +1,6 @@
 import type { Staff, User } from "@prisma/client";
 import { getPrisma } from "./db";
+import { isCloserRole } from "./roles";
 
 export async function findStaffForUser(user: Pick<User, "displayName" | "username" | "email"> | null) {
   if (!user) {
@@ -23,6 +24,20 @@ export function matchStaffForUser(user: Pick<User, "displayName" | "username" | 
     const staffNames = [person.displayName, person.firstName].map(normalizeName);
     return candidates.some((candidate) => staffNames.includes(candidate));
   }) ?? null;
+}
+
+export function staffMatchesUser(staff: Pick<Staff, "displayName" | "firstName">, user: Pick<User, "displayName" | "username" | "email" | "role">) {
+  if (!isCloserRole(user.role)) {
+    return false;
+  }
+  const candidates = [user.displayName, user.username, user.email?.split("@")[0]]
+    .filter(Boolean)
+    .map((value) => normalizeName(value ?? ""));
+  const staffNames = [staff.displayName, staff.firstName].map(normalizeName);
+
+  return candidates.some((candidate) =>
+    staffNames.includes(candidate) || candidate.split(/\s+/)[0] === normalizeName(staff.firstName),
+  );
 }
 
 function normalizeName(value: string) {

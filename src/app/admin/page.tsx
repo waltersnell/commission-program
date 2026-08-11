@@ -6,17 +6,28 @@ import {
   updateStaffAction,
   updateUserAction,
 } from "@/app/actions";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getAdminData } from "@/lib/data";
-import { basisPointsToPercentInput, centsToDollarInput, displayStatus, formatDateTime } from "@/lib/format";
+import { getAdminData, getClientLookupData, getFormOptions } from "@/lib/data";
+import { basisPointsToPercentInput, centsToDollarInput, dateInputValue, displayStatus, formatDateTime } from "@/lib/format";
 import { canAdmin, roleLabel, roles, staffJobs } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 import { AdminPanel } from "./admin-panel";
 import { CrmStepsEditor } from "./crm-steps-editor";
+import { ClientRecordEditor } from "./client-record-editor";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+const adminSections = [
+  { key: "users", label: "Users", description: "Login access and user accounts" },
+  { key: "commission", label: "Commission Settings", description: "Staff and commission rules" },
+  { key: "other", label: "Other Settings", description: "CRM, locations, and memberships" },
+  { key: "clients", label: "Client Search", description: "Client records and audit history" },
+] as const;
+
+type AdminSectionKey = (typeof adminSections)[number]["key"];
 
 export default async function AdminPage({ searchParams }: PageProps) {
   const [role, params] = await Promise.all([getCurrentRole(), searchParams]);
@@ -24,8 +35,15 @@ export default async function AdminPage({ searchParams }: PageProps) {
   if (!isAdmin) {
     redirect("/");
   }
-  const data = await getAdminData();
+  const [data, clientLookup, formOptions] = await Promise.all([
+    getAdminData(),
+    getClientLookupData(params),
+    getFormOptions(),
+  ]);
   const error = scalar(params.error);
+  const activeSection = adminSection(scalar(params.section));
+  const clientUpdated = scalar(params.clientUpdated) === "1";
+  const clientDeleted = scalar(params.clientDeleted) === "1";
 
   return (
     <div className="page-shell">
@@ -34,7 +52,28 @@ export default async function AdminPage({ searchParams }: PageProps) {
         <p className="text-[var(--text-muted)]">Manage local users, staff jobs, and commission settings.</p>
       </div>
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
-      <AdminPanel title="Create User Access">
+      {clientUpdated ? <p className="message border-[var(--teal)]">Client record updated.</p> : null}
+      {clientDeleted ? <p className="message border-[var(--teal)]">Client record deleted.</p> : null}
+
+      <nav className="admin-subnav" aria-label="Administration sections">
+        {adminSections.map((section) => {
+          const isActive = activeSection === section.key;
+          return (
+            <Link
+              key={section.key}
+              href={`/admin?section=${section.key}`}
+              className={`admin-subnav-link${isActive ? " admin-subnav-link-active" : ""}`}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <span>{section.label}</span>
+              <small>{section.description}</small>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {activeSection === "users" ? <div className="admin-section-stack">
+      <AdminPanel title="Create User Access" collapsible={false}>
         <form action={createUserAction} className="grid gap-3 md:grid-cols-6">
           <input className="field md:col-span-2" name="displayName" placeholder="Name" required disabled={!isAdmin} />
           <select className="field" name="role" required disabled={!isAdmin}>
@@ -49,7 +88,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
         </form>
       </AdminPanel>
 
-      <AdminPanel title="Users">
+      <AdminPanel title="Users" collapsible={false}>
         <div className="space-y-3">
           {data.users.map((user) => (
             <div key={user.id} className="rounded-[8px] border border-[var(--border)] p-3">
@@ -81,22 +120,10 @@ export default async function AdminPage({ searchParams }: PageProps) {
           ))}
         </div>
       </AdminPanel>
+      </div> : null}
 
-      <AdminPanel title="Add Commissionable Staff">
-        <form action={createStaffAction} className="grid gap-3 md:grid-cols-5">
-          <input className="field" name="firstName" placeholder="First name" required disabled={!isAdmin} />
-          <input className="field" name="lastName" placeholder="Last name" disabled={!isAdmin} />
-          <input className="field" name="displayName" placeholder="Display name" required disabled={!isAdmin} />
-          <select className="field" name="role" required disabled={!isAdmin}>
-            {staffJobs.map((job) => (
-              <option key={job} value={job}>{roleLabel(job)}</option>
-            ))}
-          </select>
-          <button className="button-primary" type="submit" disabled={!isAdmin}>Add commissionable staff</button>
-        </form>
-      </AdminPanel>
-
-      <AdminPanel title="Commissionable Staff">
+      {activeSection === "commission" ? <div className="admin-section-stack">
+      <AdminPanel title="Commissionable Staff" collapsible={false}>
         <div className="space-y-3">
           {data.staff.map((person) => (
             <form key={person.id} action={updateStaffAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-6">
@@ -119,7 +146,21 @@ export default async function AdminPage({ searchParams }: PageProps) {
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Commission Settings">
+      <AdminPanel title="Add Commissionable Staff" collapsible={false}>
+        <form action={createStaffAction} className="grid gap-3 md:grid-cols-5">
+          <input className="field" name="firstName" placeholder="First name" required disabled={!isAdmin} />
+          <input className="field" name="lastName" placeholder="Last name" disabled={!isAdmin} />
+          <input className="field" name="displayName" placeholder="Display name" required disabled={!isAdmin} />
+          <select className="field" name="role" required disabled={!isAdmin}>
+            {staffJobs.map((job) => (
+              <option key={job} value={job}>{roleLabel(job)}</option>
+            ))}
+          </select>
+          <button className="button-primary" type="submit" disabled={!isAdmin}>Add commissionable staff</button>
+        </form>
+      </AdminPanel>
+
+      <AdminPanel title="Commission Settings" collapsible={false}>
         <div className="space-y-3">
           {data.settings.map((setting) => (
             <form key={setting.id} action={updateCommissionSettingAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-[1.5fr_1fr_auto]">
@@ -134,21 +175,84 @@ export default async function AdminPage({ searchParams }: PageProps) {
           ))}
         </div>
       </AdminPanel>
+      </div> : null}
 
-      <AdminPanel title="CRM Steps">
+      {activeSection === "other" ? <div className="admin-section-stack">
+      <AdminPanel title="CRM Steps" collapsible={false}>
         <CrmStepsEditor steps={data.crmSteps} />
       </AdminPanel>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <AdminPanel title="Locations">
+        <AdminPanel title="Locations" collapsible={false}>
           <ListRows rows={data.locations.map((location) => [location.code, location.name, location.active ? "Active" : "Inactive"])} />
         </AdminPanel>
-        <AdminPanel title="Membership Types">
+        <AdminPanel title="Membership Types" collapsible={false}>
           <ListRows rows={data.membershipTypes.map((type) => [type.name, type.active ? "Active" : "Inactive", ""])} />
         </AdminPanel>
       </section>
+      </div> : null}
 
-      <AdminPanel title="Audit History">
+      {activeSection === "clients" ? <div className="admin-section-stack">
+      <div id="client-editor">
+        <AdminPanel title="Client Lookup" collapsible={false}>
+          <div className="space-y-4">
+            <form className="card card-soft grid gap-3 p-4 md:grid-cols-4">
+              <input type="hidden" name="section" value="clients" />
+              <input className="field" name="clientSearch" placeholder="Search name or phone" defaultValue={clientLookup.search ?? ""} />
+              <select className="field" name="clientLocationId" defaultValue={clientLookup.locationId ?? ""}>
+                <option value="">All locations</option>
+                {formOptions.locations.map((location) => <option key={location.id} value={location.id}>{location.code}</option>)}
+              </select>
+              <select className="field" name="clientCloserId" defaultValue={clientLookup.closerId ?? ""}>
+                <option value="">All closers</option>
+                {formOptions.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+              </select>
+              <button className="button-primary" type="submit">Find clients</button>
+            </form>
+
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>First Visit</th>
+                    <th>Location</th>
+                    <th>Primary</th>
+                    <th>Status</th>
+                    <th>Record</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientLookup.rows.map((client) => (
+                    <tr key={client.id}>
+                      <td>{client.firstName} {client.lastName}</td>
+                      <td>{dateInputValue(client.firstVisitDate)}</td>
+                      <td>{client.opportunity?.location.code ?? "-"}</td>
+                      <td>{client.opportunity?.proposedPrimaryCloser.displayName ?? "-"}</td>
+                      <td>{client.opportunity ? displayStatus(client.opportunity.status) : "-"}</td>
+                      <td>
+                        <Link className="font-semibold text-[var(--teal)]" href={clientLookupHref(clientLookup, client.id)}>
+                          Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {clientLookup.rows.length === 0 ? <p className="empty-state">No clients match these filters.</p> : null}
+
+            {clientLookup.selected ? (
+              <div className="border-t border-[var(--border)] pt-4">
+                <h3 className="section-title mb-3">Edit Client Record</h3>
+                <ClientRecordEditor client={clientLookup.selected} options={formOptions} />
+              </div>
+            ) : null}
+          </div>
+        </AdminPanel>
+      </div>
+
+      <AdminPanel title="Audit History" collapsible={false}>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -174,8 +278,26 @@ export default async function AdminPage({ searchParams }: PageProps) {
           </table>
         </div>
       </AdminPanel>
+      </div> : null}
     </div>
   );
+}
+
+function clientLookupHref(
+  lookup: Awaited<ReturnType<typeof getClientLookupData>>,
+  clientId: string,
+) {
+  const query = new URLSearchParams();
+  if (lookup.search) query.set("clientSearch", lookup.search);
+  if (lookup.locationId) query.set("clientLocationId", lookup.locationId);
+  if (lookup.closerId) query.set("clientCloserId", lookup.closerId);
+  query.set("section", "clients");
+  query.set("clientId", clientId);
+  return `/admin?${query.toString()}#client-editor`;
+}
+
+function adminSection(value: string | undefined): AdminSectionKey {
+  return adminSections.some((section) => section.key === value) ? value as AdminSectionKey : "users";
 }
 
 function settingInputValue(key: string, value: string) {

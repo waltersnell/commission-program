@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-08-02
+Last updated: 2026-08-11
 
 ## Current State
 
@@ -12,7 +12,7 @@ Latest in-progress flow: Hallmark-guided UI improvements for front desk speed an
 - Added durable design system files: `design.md`, `tokens.css`, `.hallmark/preflight.json`, and `.hallmark/log.json`.
 - Audience/tone/use-case decisions: front desk is primary, adding first-time clients is the fastest workflow, tone is technical/operational, and desktop/iPad/mobile must all work well.
 - Menu structure and route labels are intentionally unchanged.
-- Login now shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, ranked by credited membership sales.
+- Login now shows a read-only `Top 5 Leaderboard for <current month>` preview before sign-in, provides a visible `Forgot password?` recovery link, and preserves the entered username when a failed sign-in redirects to recovery.
 - App shell now uses the Hallmark token system, local Geist font files from the installed Next package, active nav styling, mobile hamburger navigation at 768 px or less, no `TS` mark, and consistent focus/button/input states. The mobile nav uses explicit `768px/769px` CSS breakpoints so the full desktop menu is forced off on mobile.
 - Mobile header now puts the hamburger on the right side of the app name, with user information and logout on the row below.
 - The UI palette is now light blue-grey instead of the earlier green-leaning paper/accent colors.
@@ -22,7 +22,7 @@ Latest in-progress flow: Hallmark-guided UI improvements for front desk speed an
 - Dashboard Sales by Location now uses a compact progression view with both total sold and approved sold.
 - Add First Time Client now focuses the first field and keeps the Create opportunity / Sold Membership action bar sticky for faster entry.
 - Add First Time Client now shows a single `Name` field. The submit path splits that value into the existing `Client.firstName` and `Client.lastName` columns, so this is production-data compatible and does not require a database migration.
-- Add First Time Client Primary Closer is filtered to Front Desk, Manager, and staff rows matching active Administrator users. Secondary Closer keeps the full active staff list.
+- Add First Time Client Primary and Secondary Closer choices are filtered to active Front Desk, Manager, and Administrator assignments, including matching legacy staff rows during the role transition.
 - Opportunity list highlight colors are tokenized; opportunity detail now shows clear success messages for completed tasks, recorded sales, and closed opportunities.
 - Sales, Commissions, Month-End, Admin, and Forgot Password share the updated page shell/card rhythm.
 - Timezone fix: business "today/current month" and displayed timestamps are now explicit `America/Los_Angeles`; date-only database fields remain stable calendar dates so existing production rows do not shift backward.
@@ -46,7 +46,17 @@ Previous implemented flow: Dashboard and opportunity workflow updates for the ac
 - Docker support is staged with `Dockerfile`, `.dockerignore`, and `docker-compose.yml`; the image generates Prisma Client in the final runtime stage, then the container runs `prisma migrate deploy` before `next start` and uses `/app/data/prod.db` for persistent SQLite.
 - GitHub Container Registry support is staged with `.github/workflows/docker-image.yml`; pushes to `main` build and publish `ghcr.io/waltersnell/commission-program:latest`.
 - VPS source deploy hit `@prisma/client did not initialize yet` on login because the final Docker runtime stage installed dependencies fresh without generating Prisma Client. `Dockerfile` now runs `npx prisma generate` after copying the Prisma schema into the runner stage.
-- Month-End and Admin are administrator-only in navigation and direct page access.
+- Managers see the operating menu plus Month-End, but not Admin. Month-End is read-only for pending approval actions when viewed by a manager; administrator approval buttons remain administrator-only.
+- Opportunities now show non-admin users `My Opportunities` followed by `All Other Opportunities`. Both sections link to opportunity detail, where authenticated users can edit primary and secondary closer assignments while the opportunity is still open and unsold.
+- The active navigation state is driven by the Next 16 `proxy.ts` pathname header and shared `src/lib/navigation.ts` helpers, so nested routes highlight their parent menu item.
+- Desktop and mobile active navigation now use `usePathname()` in client navigation components, preventing the blue highlight from remaining on Dashboard after client-side route changes.
+- Closer selectors now use only active Front Desk, Manager, and Administrator assignments. An active privileged login user can keep a matching existing staff record selectable even if the old staff row has a legacy role such as Therapist.
+- Administration now has a Client Lookup panel directly above Audit History. It uses the Open Opportunities name/phone, location, and closer filters, links each result to a full editor, and provides audited update and confirmed deletion actions for the client, opportunity, follow-ups, sale, and sale credits.
+- Dashboard monthly sales totals, pending approvals, location totals, and leaderboard estimates use the active month and include approved plus pending membership sales; Commission Progress remains approved-only. Rejected sales remain excluded from commission calculations.
+- Membership Sales now shows each client's total credit units summed across all credit rows, regardless of approval state.
+- Non-admin Opportunities no longer paginate the `My Opportunities` or `All Other Opportunities` sections, so all matching open Hot/Warm records are listed.
+- Dashboard Estimated Commissions now stacks below the location panel until wide desktop and uses a compact fixed-layout table so iPad users do not need horizontal scrolling.
+- Administration now uses four responsive, URL-backed submenus: Users, Commission Settings, Other Settings, and Client Search. Each submenu shows only its related panels, keeps those panels expanded, and remains selected across client lookup links and admin action redirects.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.
 
@@ -85,6 +95,14 @@ Previous implemented flow: Add First Time Client has two submit paths.
 - `src/app/admin/page.tsx`
 - `src/app/page.tsx`
 - `src/app/admin/admin-panel.tsx`
+- `src/app/admin/client-record-editor.tsx`
+- `src/app/admin/delete-client-record-button.tsx`
+- `src/app/desktop-nav.tsx`
+- `src/lib/current-staff.ts`
+- `src/lib/data.ts`
+- `src/lib/roles.ts`
+- `src/lib/validation.ts`
+- `tests/commission.test.ts`
 - `src/app/admin/crm-steps-editor.tsx`
 - `src/app/clients/new/new-client-form.tsx`
 - `src/app/opportunities/[id]/next-action-card.tsx`
@@ -158,11 +176,10 @@ npm run lint
 npx tsc --noEmit
 ```
 
-- `getFormOptions()` smoke check confirmed Primary Closer options include Front Desk/Manager plus administrator-matched staff rows, while Secondary Closer keeps the full active staff list.
+- `getFormOptions()` smoke check confirmed closer options include Front Desk/Manager plus administrator-matched staff rows.
 - `getDashboardData()` smoke check confirmed location rows include `totalCount` and `approvedCount`, and estimated leaderboard data includes pending sales.
 - Authenticated smoke checks returned `200` for `/clients/new`, `/`, and `/commissions`; `/login` returned `200`.
-- Rendered HTML checks confirmed Primary Closer excludes ordinary therapists, Secondary Closer includes the full list, Commission Progress copy says pending and approved sales are included in estimates, login leaderboard copy says pending and approved sales are included, and dashboard location rows render the compact total/approved progression.
-
+- Rendered HTML checks confirmed Primary Closer excludes ordinary therapists, login leaderboard copy says pending and approved sales are included, and dashboard location rows render the compact total/approved progression.
 Smoke checks against the running dev server confirmed:
 
 - `/clients/new` redirects unauthenticated users to `/login`.

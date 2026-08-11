@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getFormOptions, getMembershipSales } from "@/lib/data";
-import { dateInputValue, displayStatus, formatBasisPointsPercent, monthKey } from "@/lib/format";
+import { dateInputValue, displayStatus, formatBasisPointsPercent, formatCreditBasisPoints, monthKey } from "@/lib/format";
+import { sumCreditBasisPoints } from "@/lib/commission";
 import { findStaffForUser } from "@/lib/current-staff";
 import { canManage } from "@/lib/roles";
 import { getCurrentUser } from "@/lib/session";
@@ -70,6 +71,7 @@ export default async function SalesPage({ searchParams }: PageProps) {
                 <th>Primary</th>
                 <th>Support</th>
                 <th>Credits</th>
+                <th>Total Credit</th>
                 <th>First Visit</th>
                 <th>Approval</th>
               </tr>
@@ -94,6 +96,7 @@ export default async function SalesPage({ searchParams }: PageProps) {
                       ))}
                     </div>
                   </td>
+                  <td className="font-semibold">{formatCreditBasisPoints(sumCreditBasisPoints(sale.credits))}</td>
                   <td>{sale.isFirstVisitSale ? <span className="badge badge-orange">Yes</span> : "No"}</td>
                   <td><ApprovalBadge status={sale.approvalStatus} /></td>
                 </tr>

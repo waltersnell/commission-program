@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { approveSplitAction, finalizeMonthAction, reopenMonthAction } from "@/app/actions";
 import { getMonthEndData } from "@/lib/data";
 import { dateInputValue, formatCreditBasisPoints, formatMoney, monthKey } from "@/lib/format";
-import { canAdmin } from "@/lib/roles";
+import { canAdmin, canManage } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 
 type PageProps = {
@@ -14,7 +14,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const month = scalar(params.month) ?? monthKey();
   const role = await getCurrentRole();
-  if (!canAdmin(role)) {
+  if (!canManage(role)) {
     redirect("/");
   }
   const data = await getMonthEndData(month);
@@ -93,10 +93,14 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
                 </p>
                 <p className="text-xs font-semibold text-[var(--text-muted)]">Sale date {dateInputValue(sale.membershipSaleDate)}</p>
               </div>
-              <div className="flex gap-2">
-                <button className="button-primary" name="approval" value="APPROVED">Approve</button>
-                <button className="button-danger" name="approval" value="REJECTED">Reject</button>
-              </div>
+              {canAdmin(role) ? (
+                <div className="flex gap-2">
+                  <button className="button-primary" name="approval" value="APPROVED">Approve</button>
+                  <button className="button-danger" name="approval" value="REJECTED">Reject</button>
+                </div>
+              ) : (
+                <span className="badge badge-gray">Administrator approval required</span>
+              )}
             </form>
           ))}
           {data.pendingSplits.length === 0 ? <p className="empty-state">No pending sales.</p> : null}

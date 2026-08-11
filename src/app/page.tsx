@@ -30,7 +30,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <Metric label="Open opportunities" value={data.openCount.toString()} tone="sage" />
         <Metric label="Memberships sold this month" value={data.salesThisMonth.length.toString()} />
         <Metric label="First-visit close rate" value={`${data.firstVisitCloseRate}%`} />
-        <Metric label="Pending approvals" value={data.pendingApprovals.toString()} tone="orange" />
+        <Metric label="Pending approvals this month" value={data.pendingApprovals.toString()} tone="orange" />
       </section>
 
       <section className="card p-4">
@@ -73,13 +73,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <section className="workbench-grid">
         <div className="card dashboard-commission-card p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="section-title">Estimated Commissions</h2>
+            <div>
+              <h2 className="section-title">Estimated Commissions</h2>
+              <p className="text-sm text-[var(--text-muted)]">Includes approved and pending memberships.</p>
+            </div>
             <Link href="/commissions" className="button-secondary">
               View progress
             </Link>
           </div>
           <div className="table-wrap">
-            <table className="data-table">
+            <table className="data-table commission-summary-table">
               <thead>
                 <tr>
                   <th>Staff</th>

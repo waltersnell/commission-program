@@ -18,7 +18,6 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const error = scalar(params.error);
   const message = scalar(params.message);
-  const showForgot = scalar(params.showForgot) === "1";
   const userName = scalar(params.userName) ?? "";
   const leaderboardMonthLabel = monthLabel();
   const topSales = [...dashboard.commissionSummary]
@@ -53,11 +52,9 @@ export default async function LoginPage({ searchParams }: PageProps) {
             </label>
             <button className="button-primary" type="submit">Sign in</button>
           </form>
-          {showForgot ? (
-            <Link className="mt-4 inline-flex text-sm font-semibold text-[var(--teal)]" href={`/forgot-password?userName=${encodeURIComponent(userName)}`}>
-              Reset password
-            </Link>
-          ) : null}
+          <Link className="mt-4 inline-flex text-sm font-semibold text-[var(--teal)]" href={`/forgot-password?userName=${encodeURIComponent(userName)}`}>
+            Forgot password?
+          </Link>
         </section>
 
         <section className="card card-soft p-5">

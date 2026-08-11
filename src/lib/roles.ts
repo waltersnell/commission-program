@@ -2,7 +2,7 @@ export const roles = ["FRONT_DESK", "MANAGER", "ADMINISTRATOR"] as const;
 
 export type Role = (typeof roles)[number];
 
-export const staffJobs = ["FRONT_DESK", "MANAGER", "THERAPIST", "OPERATIONS", "SALES"] as const;
+export const staffJobs = ["FRONT_DESK", "MANAGER", "ADMINISTRATOR", "THERAPIST", "OPERATIONS", "SALES"] as const;
 
 export type StaffJob = (typeof staffJobs)[number];
 
@@ -20,6 +20,10 @@ export function canManage(role: string) {
 
 export function canAdmin(role: string) {
   return role === "ADMINISTRATOR";
+}
+
+export function isCloserRole(role: string) {
+  return role === "FRONT_DESK" || role === "MANAGER" || role === "ADMINISTRATOR";
 }
 
 export function assertCanEditFinalized(role: string) {

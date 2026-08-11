@@ -5,13 +5,15 @@ import {
   calculateCommissionForStaff,
   createSaleCredits,
   isFirstVisitSale,
+  sumCreditBasisPoints,
   type CommissionCreditInput,
 } from "../src/lib/commission";
-import { saleEntrySchema } from "../src/lib/validation";
-import { clientEntrySchema } from "../src/lib/validation";
+import { clientEntrySchema, opportunityCloserSchema, saleEntrySchema } from "../src/lib/validation";
 import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, monthRange, toLocalDate } from "../src/lib/format";
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
 import { summarizePendingSalesByStaff } from "../src/lib/data";
+import { getNavItems, isActivePath } from "../src/lib/navigation";
+import { staffMatchesUser } from "../src/lib/current-staff";
 import { splitClientName } from "../src/lib/client-form-state";
 
 const staffId = "staff-a";
@@ -37,6 +39,13 @@ function credits(count: number) {
 }
 
 describe("commission calculations", () => {
+  it("sums all client credit rows regardless of approval state", () => {
+    expect(sumCreditBasisPoints([
+      { creditBasisPoints: 7000 },
+      { creditBasisPoints: 3000 },
+    ])).toBe(10000);
+  });
+
   it("calculates ten full sales as $250 base commission", () => {
     expect(calculateCommissionForStaff(staffId, credits(10)).baseCommissionCents).toBe(25000);
   });
@@ -212,6 +221,16 @@ describe("validation and locking", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a secondary closer matching the primary closer", () => {
+    const result = opportunityCloserSchema.safeParse({
+      opportunityId: "opp",
+      proposedPrimaryCloserId: "staff",
+      proposedSupportCloserId: "staff",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("requires an other session name when Other is selected", () => {
     const result = clientEntrySchema.safeParse({
       name: "Test Client",
@@ -259,6 +278,42 @@ describe("validation and locking", () => {
   it("prevents Front Desk users from editing finalized months", () => {
     expect(assertCanEditPeriod("FRONT_DESK", "FINALIZED")).toBe(false);
     expect(assertCanEditPeriod("ADMINISTRATOR", "FINALIZED")).toBe(true);
+  });
+});
+
+describe("role navigation", () => {
+  it("gives managers Month-End access without Admin", () => {
+    const labels = getNavItems("MANAGER").map((item) => item.label);
+
+    expect(labels).toContain("Month-End");
+    expect(labels).not.toContain("Admin");
+  });
+
+  it("keeps Admin visible only to administrators", () => {
+    expect(getNavItems("ADMINISTRATOR").map((item) => item.label)).toContain("Admin");
+    expect(getNavItems("FRONT_DESK").map((item) => item.label)).not.toContain("Month-End");
+  });
+
+  it("marks nested opportunity routes active without marking Dashboard active", () => {
+    expect(isActivePath("/opportunities/client-1", "/opportunities")).toBe(true);
+    expect(isActivePath("/opportunities/client-1", "/")).toBe(false);
+    expect(isActivePath("/", "/")).toBe(true);
+  });
+});
+
+describe("closer eligibility", () => {
+  it("matches an administrator user to an existing staff record by first name", () => {
+    expect(staffMatchesUser(
+      { displayName: "Lawani", firstName: "Lawani" },
+      { displayName: "Lawani N", username: "lawani@thaisportusa.com", email: "lawani@thaisportusa.com", role: "ADMINISTRATOR" },
+    )).toBe(true);
+  });
+
+  it("does not match a therapist user as a privileged closer", () => {
+    expect(staffMatchesUser(
+      { displayName: "Alice", firstName: "Alice" },
+      { displayName: "Alice", username: "alice@thaisportusa.com", email: "alice@thaisportusa.com", role: "THERAPIST" },
+    )).toBe(false);
   });
 });
 
