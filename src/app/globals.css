@@ -197,9 +197,34 @@ a {
   gap: var(--space-xl);
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 80rem) {
   .workbench-grid {
     grid-template-columns: minmax(0, 1.1fr) minmax(20rem, 0.9fr);
+  }
+}
+
+.commission-summary-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.commission-summary-table th,
+.commission-summary-table td {
+  overflow-wrap: anywhere;
+}
+
+.commission-summary-table th {
+  white-space: normal;
+}
+
+@media (max-width: 79.99rem) {
+  .commission-summary-table {
+    font-size: var(--text-xs);
+  }
+
+  .commission-summary-table th,
+  .commission-summary-table td {
+    padding: 0.5rem 0.35rem;
   }
 }
 
@@ -401,6 +426,84 @@ a {
 
 .admin-panel-trigger:active {
   background: var(--color-accent-2);
+}
+
+.admin-subnav {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.admin-subnav-link {
+  background: var(--color-surface);
+  border: var(--rule-panel) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  color: var(--color-ink-2);
+  display: grid;
+  gap: var(--space-xs);
+  min-height: var(--touch-target);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  padding: var(--space-md);
+  transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+
+.admin-subnav-link > span {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-subnav-link > small {
+  color: var(--color-muted);
+  line-height: 1.35;
+}
+
+.admin-subnav-link-active {
+  background: var(--color-accent-2);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.admin-subnav-link-active > small {
+  color: var(--color-ink-2);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-subnav-link:hover {
+    background: var(--color-surface-2);
+    border-color: var(--color-rule-2);
+  }
+
+  .admin-subnav-link-active:hover {
+    background: var(--color-accent-2);
+    border-color: var(--color-accent);
+  }
+}
+
+.admin-subnav-link:focus-visible {
+  outline-color: var(--color-focus);
+}
+
+.admin-subnav-link:active {
+  background: var(--color-paper-2);
+}
+
+.admin-section-stack {
+  display: grid;
+  gap: var(--space-xl);
+  min-width: 0;
+}
+
+@media (min-width: 40rem) {
+  .admin-subnav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .admin-subnav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .desktop-nav {

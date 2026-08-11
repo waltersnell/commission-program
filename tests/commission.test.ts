@@ -5,6 +5,7 @@ import {
   calculateCommissionForStaff,
   createSaleCredits,
   isFirstVisitSale,
+  sumCreditBasisPoints,
   type CommissionCreditInput,
 } from "../src/lib/commission";
 import { clientEntrySchema, opportunityCloserSchema, saleEntrySchema } from "../src/lib/validation";
@@ -37,6 +38,13 @@ function credits(count: number) {
 }
 
 describe("commission calculations", () => {
+  it("sums all client credit rows regardless of approval state", () => {
+    expect(sumCreditBasisPoints([
+      { creditBasisPoints: 7000 },
+      { creditBasisPoints: 3000 },
+    ])).toBe(10000);
+  });
+
   it("calculates ten full sales as $250 base commission", () => {
     expect(calculateCommissionForStaff(staffId, credits(10)).baseCommissionCents).toBe(25000);
   });

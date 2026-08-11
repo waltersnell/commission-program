@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-08-03
+Last updated: 2026-08-11
 
 ## Current State
 
@@ -48,6 +48,11 @@ Previous implemented flow: Dashboard and opportunity workflow updates for the ac
 - Desktop and mobile active navigation now use `usePathname()` in client navigation components, preventing the blue highlight from remaining on Dashboard after client-side route changes.
 - Closer selectors now use only active Front Desk, Manager, and Administrator assignments. An active privileged login user can keep a matching existing staff record selectable even if the old staff row has a legacy role such as Therapist.
 - Administration now has a Client Lookup panel directly above Audit History. It uses the Open Opportunities name/phone, location, and closer filters, links each result to a full editor, and provides audited update and confirmed deletion actions for the client, opportunity, follow-ups, sale, and sale credits.
+- Dashboard monthly sales totals, pending approvals, location totals, and leaderboard estimates use the active month and include approved plus pending membership sales; Commission Progress remains approved-only. Rejected sales remain excluded from commission calculations.
+- Membership Sales now shows each client's total credit units summed across all credit rows, regardless of approval state.
+- Non-admin Opportunities no longer paginate the `My Opportunities` or `All Other Opportunities` sections, so all matching open Hot/Warm records are listed.
+- Dashboard Estimated Commissions now stacks below the location panel until wide desktop and uses a compact fixed-layout table so iPad users do not need horizontal scrolling.
+- Administration now uses four responsive, URL-backed submenus: Users, Commission Settings, Other Settings, and Client Search. Each submenu shows only its related panels, keeps those panels expanded, and remains selected across client lookup links and admin action redirects.
 - New membership sales start as `PENDING`; administrator approval is required before they count toward commissions.
 - Non-manager sales and commission views are limited to the logged-in user's matching staff record.
 

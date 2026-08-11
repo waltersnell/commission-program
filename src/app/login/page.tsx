@@ -61,7 +61,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="section-title">Top 5 Leaderboard for {leaderboardMonthLabel}</h2>
-              <p className="text-sm text-[var(--text-muted)]">Ranked by memberships sold this month.</p>
+              <p className="text-sm text-[var(--text-muted)]">Ranked by approved and pending memberships this month.</p>
             </div>
             <span className="badge badge-teal">{dashboard.salesThisMonth.length} total sales</span>
           </div>

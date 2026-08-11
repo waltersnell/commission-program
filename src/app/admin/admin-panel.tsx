@@ -2,9 +2,28 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-export function AdminPanel({ title, children, initialOpen = false }: { title: string; children: ReactNode; initialOpen?: boolean }) {
+export function AdminPanel({
+  title,
+  children,
+  initialOpen = false,
+  collapsible = true,
+}: {
+  title: string;
+  children: ReactNode;
+  initialOpen?: boolean;
+  collapsible?: boolean;
+}) {
   const [open, setOpen] = useState(initialOpen);
   const contentId = useId();
+
+  if (!collapsible) {
+    return (
+      <section className="card p-4">
+        <h2 className="section-title">{title}</h2>
+        <div className="mt-4">{children}</div>
+      </section>
+    );
+  }
 
   return (
     <section className="card p-4">

@@ -628,7 +628,7 @@ export async function createStaffAction(formData: FormData) {
   requireAdmin(role);
   const parsed = staffSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
   }
   const data = parsed.data;
   const staff = await getPrisma().staff.create({
@@ -642,7 +642,7 @@ export async function createStaffAction(formData: FormData) {
   });
   await auditAdminChange(role, "STAFF_CREATED", "Staff", staff.id, staff.displayName);
   revalidatePath("/admin");
-  redirect("/admin?staff=created");
+  redirect("/admin?section=commission&staff=created");
 }
 
 export async function updateStaffAction(formData: FormData) {
@@ -651,7 +651,7 @@ export async function updateStaffAction(formData: FormData) {
   requireAdmin(role);
   const parsed = staffSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success || !parsed.data.staffId) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.success ? "Missing staff record." : parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent(parsed.success ? "Missing staff record." : parsed.error.issues[0]?.message ?? "Check the staff form.")}`);
   }
   const data = parsed.data;
   const staff = await getPrisma().staff.update({
@@ -666,7 +666,7 @@ export async function updateStaffAction(formData: FormData) {
   });
   await auditAdminChange(role, "STAFF_EDITED", "Staff", staff.id, staff.displayName);
   revalidatePath("/admin");
-  redirect("/admin?staff=updated");
+  redirect("/admin?section=commission&staff=updated");
 }
 
 export async function updateCommissionSettingAction(formData: FormData) {
@@ -675,25 +675,25 @@ export async function updateCommissionSettingAction(formData: FormData) {
   requireAdmin(role);
   const parsed = commissionSettingSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the commission setting.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the commission setting.")}`);
   }
 
   const prisma = getPrisma();
   const setting = await prisma.commissionSetting.findUnique({ where: { id: parsed.data.settingId } });
   if (!setting) {
-    redirect(`/admin?error=${encodeURIComponent("Commission setting was not found.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent("Commission setting was not found.")}`);
   }
 
   const normalizedValue = normalizeSettingValue(setting.key, parsed.data.value);
   if (!normalizedValue) {
-    redirect(`/admin?error=${encodeURIComponent("Enter a valid setting value.")}`);
+    redirect(`/admin?section=commission&error=${encodeURIComponent("Enter a valid setting value.")}`);
   }
 
   if (setting.key === "primarySplitBasisPoints" || setting.key === "supportSplitBasisPoints") {
     const siblingKey = setting.key === "primarySplitBasisPoints" ? "supportSplitBasisPoints" : "primarySplitBasisPoints";
     const sibling = await prisma.commissionSetting.findUnique({ where: { key: siblingKey } });
     if (sibling && Number(normalizedValue) + Number(sibling.value) !== 10000) {
-      redirect(`/admin?error=${encodeURIComponent("Primary and support split percentages must equal 100%.")}`);
+      redirect(`/admin?section=commission&error=${encodeURIComponent("Primary and support split percentages must equal 100%.")}`);
     }
   }
 
@@ -705,7 +705,7 @@ export async function updateCommissionSettingAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/commissions");
   revalidatePath("/month-end");
-  redirect("/admin?settings=updated");
+  redirect("/admin?section=commission&settings=updated");
 }
 
 export async function updateCrmStepTemplateAction(formData: FormData) {
@@ -714,12 +714,12 @@ export async function updateCrmStepTemplateAction(formData: FormData) {
   requireAdmin(role);
   const parsed = crmStepTemplateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the CRM step.")}`);
+    redirect(`/admin?section=other&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the CRM step.")}`);
   }
 
   const existing = await getPrisma().crmStepTemplate.findUnique({ where: { id: parsed.data.stepId } });
   if (!existing || existing.key !== parsed.data.key) {
-    redirect(`/admin?error=${encodeURIComponent("CRM step was not found.")}`);
+    redirect(`/admin?section=other&error=${encodeURIComponent("CRM step was not found.")}`);
   }
 
   const step = await getPrisma().crmStepTemplate.update({
@@ -728,7 +728,7 @@ export async function updateCrmStepTemplateAction(formData: FormData) {
   });
   await auditAdminChange(role, "CRM_STEP_TEMPLATE_EDITED", "CrmStepTemplate", step.id, step.label);
   revalidatePath("/admin");
-  redirect("/admin?crm=updated");
+  redirect("/admin?section=other&crm=updated");
 }
 
 export async function updateClientRecordAction(formData: FormData) {
@@ -816,7 +816,7 @@ export async function deleteClientRecordAction(formData: FormData) {
   requireAdmin(role);
   const parsed = clientRecordDeleteSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Client record was not found.")}`);
+    redirect(`/admin?section=clients&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Client record was not found.")}`);
   }
 
   const prisma = getPrisma();
@@ -825,7 +825,7 @@ export async function deleteClientRecordAction(formData: FormData) {
     include: { opportunity: { include: { sale: true } } },
   });
   if (!client) {
-    redirect(`/admin?error=${encodeURIComponent("Client record was not found.")}`);
+    redirect(`/admin?section=clients&error=${encodeURIComponent("Client record was not found.")}`);
   }
 
   await prisma.$transaction(async (tx) => {
@@ -852,7 +852,7 @@ export async function deleteClientRecordAction(formData: FormData) {
   revalidatePath("/opportunities");
   revalidatePath("/");
   revalidatePath("/sales");
-  redirect("/admin?clientDeleted=1");
+  redirect("/admin?section=clients&clientDeleted=1");
 }
 
 export async function createUserAction(formData: FormData) {
@@ -861,7 +861,7 @@ export async function createUserAction(formData: FormData) {
   requireAdmin(role);
   const parsed = userCreateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
   }
   const data = parsed.data;
   const phone = normalizePhone(data.phone);
@@ -870,7 +870,7 @@ export async function createUserAction(formData: FormData) {
     where: { OR: [{ email }, { username: email }] },
   });
   if (existing) {
-    redirect(`/admin?error=${encodeURIComponent("A user with that email already exists.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent("A user with that email already exists.")}`);
   }
   const user = await getPrisma().user.create({
     data: {
@@ -886,7 +886,7 @@ export async function createUserAction(formData: FormData) {
   });
   await auditAdminChange(role, "USER_CREATED", "User", user.id, user.email ?? user.username);
   revalidatePath("/admin");
-  redirect("/admin?user=created");
+  redirect("/admin?section=users&user=created");
 }
 
 export async function updateUserAction(formData: FormData) {
@@ -895,7 +895,7 @@ export async function updateUserAction(formData: FormData) {
   requireAdmin(role);
   const parsed = userEditSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the user form.")}`);
   }
   const data = parsed.data;
   const phone = normalizePhone(data.phone);
@@ -904,7 +904,7 @@ export async function updateUserAction(formData: FormData) {
     where: { OR: [{ email }, { username: email }], NOT: { id: data.userId } },
   });
   if (existing) {
-    redirect(`/admin?error=${encodeURIComponent("A different user already has that email.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent("A different user already has that email.")}`);
   }
   const user = await getPrisma().user.update({
     where: { id: data.userId },
@@ -921,7 +921,7 @@ export async function updateUserAction(formData: FormData) {
   });
   await auditAdminChange(role, "USER_EDITED", "User", user.id, user.email ?? user.username);
   revalidatePath("/admin");
-  redirect("/admin?user=updated");
+  redirect("/admin?section=users&user=updated");
 }
 
 export async function deactivateUserAction(formData: FormData) {
@@ -930,7 +930,7 @@ export async function deactivateUserAction(formData: FormData) {
   requireAdmin(role);
   const parsed = userDeactivateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Missing user.")}`);
+    redirect(`/admin?section=users&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Missing user.")}`);
   }
   const user = await getPrisma().user.update({
     where: { id: parsed.data.userId },
@@ -938,7 +938,7 @@ export async function deactivateUserAction(formData: FormData) {
   });
   await auditAdminChange(role, "USER_DEACTIVATED", "User", user.id, user.email ?? user.username);
   revalidatePath("/admin");
-  redirect("/admin?user=deactivated");
+  redirect("/admin?section=users&user=deactivated");
 }
 
 function requireAdmin(role: string) {
@@ -1005,5 +1005,5 @@ function optionalDate(value: string | undefined) {
 }
 
 function adminClientRedirect(clientId: string, query: string) {
-  return `/admin?clientId=${encodeURIComponent(clientId)}&${query}#client-editor`;
+  return `/admin?section=clients&clientId=${encodeURIComponent(clientId)}&${query}#client-editor`;
 }

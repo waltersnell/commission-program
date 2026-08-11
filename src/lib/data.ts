@@ -57,7 +57,9 @@ export async function getDashboardData(month = monthKey()) {
   const prisma = getPrisma();
   const [openCount, pendingApprovals, recentOpportunities, salesThisMonth, locations, commissionSummary] = await Promise.all([
     prisma.membershipOpportunity.count({ where: { status: "OPEN" } }),
-    prisma.membershipSale.count({ where: { approvalStatus: "PENDING" } }),
+    prisma.membershipSale.count({
+      where: { ...saleMonthWhere(month), approvalStatus: "PENDING" },
+    }),
     prisma.membershipOpportunity.findMany({
       take: 8,
       orderBy: { createdAt: "desc" },
@@ -90,7 +92,7 @@ export async function getDashboardData(month = monthKey()) {
   const firstVisitSales = salesThisMonth.filter((sale) => sale.isFirstVisitSale).length;
   const soldByLocation = locations.map((location) => ({
     code: location.code,
-    count: salesThisMonth.filter((sale) => sale.locationId === location.id && sale.approvalStatus === "APPROVED").length,
+    count: salesThisMonth.filter((sale) => sale.locationId === location.id).length,
   }));
 
   return {
@@ -114,6 +116,7 @@ export async function getOpportunities(
   const prisma = getPrisma();
   const page = Number(params.page ?? 1);
   const take = 25;
+  const paginate = !visibleStaffId;
   const skip = (Math.max(page, 1) - 1) * take;
   const search = scalar(params.search);
   const locationId = scalar(params.locationId);
@@ -164,8 +167,7 @@ export async function getOpportunities(
   const [rows, total] = await Promise.all([
     prisma.membershipOpportunity.findMany({
       where,
-      take,
-      skip,
+      ...(paginate ? { take, skip } : {}),
       orderBy: [{ client: { firstVisitDate: "desc" } }, { createdAt: "desc" }],
       include: {
         client: true,
@@ -184,7 +186,12 @@ export async function getOpportunities(
     daysOpen: Math.max(0, Math.floor((now - row.createdAt.getTime()) / 86_400_000)),
   }));
 
-  return { rows: rowsWithDaysOpen, total, page, pageCount: Math.max(1, Math.ceil(total / take)) };
+  return {
+    rows: rowsWithDaysOpen,
+    total,
+    page: paginate ? page : 1,
+    pageCount: paginate ? Math.max(1, Math.ceil(total / take)) : 1,
+  };
 }
 
 export async function getOpportunity(id: string) {

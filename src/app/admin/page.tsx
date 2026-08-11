@@ -20,6 +20,15 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+const adminSections = [
+  { key: "users", label: "Users", description: "Login access and user accounts" },
+  { key: "commission", label: "Commission Settings", description: "Staff and commission rules" },
+  { key: "other", label: "Other Settings", description: "CRM, locations, and memberships" },
+  { key: "clients", label: "Client Search", description: "Client records and audit history" },
+] as const;
+
+type AdminSectionKey = (typeof adminSections)[number]["key"];
+
 export default async function AdminPage({ searchParams }: PageProps) {
   const [role, params] = await Promise.all([getCurrentRole(), searchParams]);
   const isAdmin = canAdmin(role);
@@ -32,6 +41,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
     getFormOptions(),
   ]);
   const error = scalar(params.error);
+  const activeSection = adminSection(scalar(params.section));
   const clientUpdated = scalar(params.clientUpdated) === "1";
   const clientDeleted = scalar(params.clientDeleted) === "1";
 
@@ -44,7 +54,26 @@ export default async function AdminPage({ searchParams }: PageProps) {
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
       {clientUpdated ? <p className="message border-[var(--teal)]">Client record updated.</p> : null}
       {clientDeleted ? <p className="message border-[var(--teal)]">Client record deleted.</p> : null}
-      <AdminPanel title="Create User Access">
+
+      <nav className="admin-subnav" aria-label="Administration sections">
+        {adminSections.map((section) => {
+          const isActive = activeSection === section.key;
+          return (
+            <Link
+              key={section.key}
+              href={`/admin?section=${section.key}`}
+              className={`admin-subnav-link${isActive ? " admin-subnav-link-active" : ""}`}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <span>{section.label}</span>
+              <small>{section.description}</small>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {activeSection === "users" ? <div className="admin-section-stack">
+      <AdminPanel title="Create User Access" collapsible={false}>
         <form action={createUserAction} className="grid gap-3 md:grid-cols-6">
           <input className="field md:col-span-2" name="displayName" placeholder="Name" required disabled={!isAdmin} />
           <select className="field" name="role" required disabled={!isAdmin}>
@@ -59,7 +88,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
         </form>
       </AdminPanel>
 
-      <AdminPanel title="Users">
+      <AdminPanel title="Users" collapsible={false}>
         <div className="space-y-3">
           {data.users.map((user) => (
             <div key={user.id} className="rounded-[8px] border border-[var(--border)] p-3">
@@ -91,22 +120,10 @@ export default async function AdminPage({ searchParams }: PageProps) {
           ))}
         </div>
       </AdminPanel>
+      </div> : null}
 
-      <AdminPanel title="Add Commissionable Staff">
-        <form action={createStaffAction} className="grid gap-3 md:grid-cols-5">
-          <input className="field" name="firstName" placeholder="First name" required disabled={!isAdmin} />
-          <input className="field" name="lastName" placeholder="Last name" disabled={!isAdmin} />
-          <input className="field" name="displayName" placeholder="Display name" required disabled={!isAdmin} />
-          <select className="field" name="role" required disabled={!isAdmin}>
-            {staffJobs.map((job) => (
-              <option key={job} value={job}>{roleLabel(job)}</option>
-            ))}
-          </select>
-          <button className="button-primary" type="submit" disabled={!isAdmin}>Add commissionable staff</button>
-        </form>
-      </AdminPanel>
-
-      <AdminPanel title="Commissionable Staff">
+      {activeSection === "commission" ? <div className="admin-section-stack">
+      <AdminPanel title="Commissionable Staff" collapsible={false}>
         <div className="space-y-3">
           {data.staff.map((person) => (
             <form key={person.id} action={updateStaffAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-6">
@@ -129,7 +146,21 @@ export default async function AdminPage({ searchParams }: PageProps) {
         </div>
       </AdminPanel>
 
-      <AdminPanel title="Commission Settings">
+      <AdminPanel title="Add Commissionable Staff" collapsible={false}>
+        <form action={createStaffAction} className="grid gap-3 md:grid-cols-5">
+          <input className="field" name="firstName" placeholder="First name" required disabled={!isAdmin} />
+          <input className="field" name="lastName" placeholder="Last name" disabled={!isAdmin} />
+          <input className="field" name="displayName" placeholder="Display name" required disabled={!isAdmin} />
+          <select className="field" name="role" required disabled={!isAdmin}>
+            {staffJobs.map((job) => (
+              <option key={job} value={job}>{roleLabel(job)}</option>
+            ))}
+          </select>
+          <button className="button-primary" type="submit" disabled={!isAdmin}>Add commissionable staff</button>
+        </form>
+      </AdminPanel>
+
+      <AdminPanel title="Commission Settings" collapsible={false}>
         <div className="space-y-3">
           {data.settings.map((setting) => (
             <form key={setting.id} action={updateCommissionSettingAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-[1.5fr_1fr_auto]">
@@ -144,24 +175,29 @@ export default async function AdminPage({ searchParams }: PageProps) {
           ))}
         </div>
       </AdminPanel>
+      </div> : null}
 
-      <AdminPanel title="CRM Steps">
+      {activeSection === "other" ? <div className="admin-section-stack">
+      <AdminPanel title="CRM Steps" collapsible={false}>
         <CrmStepsEditor steps={data.crmSteps} />
       </AdminPanel>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <AdminPanel title="Locations">
+        <AdminPanel title="Locations" collapsible={false}>
           <ListRows rows={data.locations.map((location) => [location.code, location.name, location.active ? "Active" : "Inactive"])} />
         </AdminPanel>
-        <AdminPanel title="Membership Types">
+        <AdminPanel title="Membership Types" collapsible={false}>
           <ListRows rows={data.membershipTypes.map((type) => [type.name, type.active ? "Active" : "Inactive", ""])} />
         </AdminPanel>
       </section>
+      </div> : null}
 
+      {activeSection === "clients" ? <div className="admin-section-stack">
       <div id="client-editor">
-        <AdminPanel title="Client Lookup" initialOpen={Boolean(clientLookup.selected)}>
+        <AdminPanel title="Client Lookup" collapsible={false}>
           <div className="space-y-4">
             <form className="card card-soft grid gap-3 p-4 md:grid-cols-4">
+              <input type="hidden" name="section" value="clients" />
               <input className="field" name="clientSearch" placeholder="Search name or phone" defaultValue={clientLookup.search ?? ""} />
               <select className="field" name="clientLocationId" defaultValue={clientLookup.locationId ?? ""}>
                 <option value="">All locations</option>
@@ -216,7 +252,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
         </AdminPanel>
       </div>
 
-      <AdminPanel title="Audit History">
+      <AdminPanel title="Audit History" collapsible={false}>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -242,6 +278,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
           </table>
         </div>
       </AdminPanel>
+      </div> : null}
     </div>
   );
 }
@@ -254,8 +291,13 @@ function clientLookupHref(
   if (lookup.search) query.set("clientSearch", lookup.search);
   if (lookup.locationId) query.set("clientLocationId", lookup.locationId);
   if (lookup.closerId) query.set("clientCloserId", lookup.closerId);
+  query.set("section", "clients");
   query.set("clientId", clientId);
   return `/admin?${query.toString()}#client-editor`;
+}
+
+function adminSection(value: string | undefined): AdminSectionKey {
+  return adminSections.some((section) => section.key === value) ? value as AdminSectionKey : "users";
 }
 
 function settingInputValue(key: string, value: string) {

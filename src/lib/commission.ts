@@ -130,6 +130,10 @@ export function filterCreditsForMonth(credits: CommissionCreditInput[], month = 
   return credits.filter((credit) => monthKey(credit.saleDate) === month);
 }
 
+export function sumCreditBasisPoints(credits: Pick<CommissionCreditInput, "creditBasisPoints">[]) {
+  return credits.reduce((total, credit) => total + credit.creditBasisPoints, 0);
+}
+
 export function settingsFromRows(rows: { key: string; value: string }[]): CommissionSettings {
   const byKey = Object.fromEntries(rows.map((row) => [row.key, row.value]));
   return {
