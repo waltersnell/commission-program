@@ -45,6 +45,7 @@ export function NewClientForm({
     values: {
       ...emptyNewClientFormValues,
       firstVisitDate: currentDateInputValue(new Date()),
+      membershipSaleDate: currentDateInputValue(new Date()),
     },
   }), [duplicate]);
   const [state, formAction] = useActionState(createClientAction, startingState);
@@ -69,6 +70,8 @@ export function NewClientForm({
     const phoneDigits = String(formData.get("phone") ?? "").replace(/\D/g, "");
     const primaryCloser = String(formData.get("proposedPrimaryCloserId") ?? "");
     const supportCloser = String(formData.get("proposedSupportCloserId") ?? "");
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const isSoldMembership = submitter instanceof HTMLButtonElement && submitter.value === "soldMembership";
     const nextErrors: NewClientFormState["fieldErrors"] = {};
 
     if (phoneDigits.length !== 10) {
@@ -79,6 +82,9 @@ export function NewClientForm({
     }
     if (sessionType === "Other" && !String(formData.get("sessionOther") ?? "").trim()) {
       nextErrors.sessionOther = "Enter the other session name.";
+    }
+    if (isSoldMembership && !String(formData.get("membershipSaleDate") ?? "").trim()) {
+      nextErrors.membershipSaleDate = "Enter the actual membership purchase date.";
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -128,6 +134,12 @@ export function NewClientForm({
         <span className="text-sm font-semibold">First-visit date</span>
         <input className="field" name="firstVisitDate" type="date" defaultValue={state.values.firstVisitDate} aria-invalid={Boolean(fieldErrors.firstVisitDate)} required />
         <FieldError message={fieldErrors.firstVisitDate} />
+      </label>
+      <label className="grid gap-1">
+        <span className="text-sm font-semibold">Membership sale date</span>
+        <input className="field" name="membershipSaleDate" type="date" defaultValue={state.values.membershipSaleDate} aria-invalid={Boolean(fieldErrors.membershipSaleDate)} />
+        <span className="text-xs text-[var(--text-muted)]">Required only when selecting Sold Membership. Use the actual purchase date.</span>
+        <FieldError message={fieldErrors.membershipSaleDate} />
       </label>
       <label className="grid gap-1">
         <span className="text-sm font-semibold">Client Type</span>

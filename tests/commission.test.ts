@@ -14,7 +14,7 @@ import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/l
 import { summarizePendingSalesByStaff } from "../src/lib/data";
 import { getNavItems, isActivePath } from "../src/lib/navigation";
 import { staffMatchesUser } from "../src/lib/current-staff";
-import { splitClientName } from "../src/lib/client-form-state";
+import { newClientValuesFromFormData, splitClientName } from "../src/lib/client-form-state";
 
 const staffId = "staff-a";
 
@@ -273,6 +273,19 @@ describe("validation and locking", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("keeps membership sale date separate from first-visit date", () => {
+    const formData = new FormData();
+    formData.set("name", "Test Client");
+    formData.set("firstVisitDate", "2026-08-01");
+    formData.set("membershipSaleDate", "2026-08-11");
+
+    const values = newClientValuesFromFormData(formData);
+
+    expect(values.firstVisitDate).toBe("2026-08-01");
+    expect(values.membershipSaleDate).toBe("2026-08-11");
+    expect(isFirstVisitSale(toLocalDate(values.firstVisitDate), toLocalDate(values.membershipSaleDate))).toBe(false);
   });
 
   it("prevents Front Desk users from editing finalized months", () => {

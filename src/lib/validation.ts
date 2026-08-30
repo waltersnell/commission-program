@@ -18,6 +18,7 @@ const clientEntryFields = {
   phone: z.string().trim().min(1, "Phone number is required."),
   email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
   firstVisitDate: requiredString,
+  membershipSaleDate: optionalString,
   sessionType: z.enum(firstTimeClientSessions, { message: "Select a session." }),
   sessionOther: optionalString,
   clientType: z.enum(firstTimeClientTypes, { message: "Select a client type." }),

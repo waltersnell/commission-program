@@ -13,6 +13,7 @@ import { getPrisma } from "@/lib/db";
 import {
   dollarInputToCents,
   percentInputToBasisPoints,
+  basisPointsToDecimalString,
   dateInputValue,
   monthKey,
   normalizePhone,
@@ -132,6 +133,12 @@ export async function createClientAction(_state: NewClientFormState = initialNew
   const clientName = splitClientName(data.name);
   const phone = normalizePhone(data.phone);
   const firstVisitDate = toLocalDate(data.firstVisitDate);
+  if (soldMembership && !data.membershipSaleDate) {
+    return clientFormError(values, "Enter the actual membership purchase date.", {
+      membershipSaleDate: "Enter the actual membership purchase date.",
+    });
+  }
+  const membershipSaleDate = soldMembership ? toLocalDate(data.membershipSaleDate!) : null;
   const submittedAt = new Date();
   const prisma = getPrisma();
   const duplicate = await prisma.client.findFirst({
@@ -159,7 +166,7 @@ export async function createClientAction(_state: NewClientFormState = initialNew
     const [preferredMembershipType, fallbackMembershipType, period, settingsRows] = await Promise.all([
       prisma.membershipType.findFirst({ where: { active: true, name: "Individual Membership" } }),
       prisma.membershipType.findFirst({ where: { active: true }, orderBy: { name: "asc" } }),
-      prisma.commissionPeriod.findUnique({ where: { month: monthKey(firstVisitDate) } }),
+      prisma.commissionPeriod.findUnique({ where: { month: monthKey(membershipSaleDate!) } }),
       prisma.commissionSetting.findMany(),
     ]);
 
@@ -218,16 +225,17 @@ export async function createClientAction(_state: NewClientFormState = initialNew
 
     if (soldMembershipSetup) {
       const supportId = data.proposedSupportCloserId || null;
+      const firstVisitCredit = isFirstVisitSale(firstVisitDate, membershipSaleDate!);
       const sale = await tx.membershipSale.create({
         data: {
           opportunityId: created.id,
           locationId: data.locationId,
-          membershipSaleDate: firstVisitDate,
+          membershipSaleDate: membershipSaleDate!,
           membershipTypeId: soldMembershipSetup.membershipTypeId,
           finalPrimaryCloserId: data.proposedPrimaryCloserId,
           finalSupportCloserId: supportId,
           approvalStatus: "PENDING",
-          isFirstVisitSale: true,
+          isFirstVisitSale: firstVisitCredit,
           notes: data.notes || null,
           createdAt: submittedAt,
         },
@@ -237,7 +245,7 @@ export async function createClientAction(_state: NewClientFormState = initialNew
           saleId: sale.id,
           primaryStaffId: data.proposedPrimaryCloserId,
           supportStaffId: supportId,
-          isFirstVisitSale: true,
+          isFirstVisitSale: firstVisitCredit,
           settings: soldMembershipSetup.settings,
         }),
       });
@@ -251,7 +259,7 @@ export async function createClientAction(_state: NewClientFormState = initialNew
           action: "MEMBERSHIP_RECORDED",
           recordType: "MembershipSale",
           recordId: sale.id,
-          newValue: dateInputValue(firstVisitDate),
+          newValue: dateInputValue(membershipSaleDate!),
         },
       });
     }
@@ -747,14 +755,25 @@ export async function updateClientRecordAction(formData: FormData) {
   const prisma = getPrisma();
   const existing = await prisma.client.findUnique({
     where: { id: data.clientId },
-    include: { opportunity: { include: { sale: true } } },
+    include: { opportunity: { include: { sale: { include: { credits: true } } } } },
   });
   if (!existing || !existing.opportunity || existing.opportunity.id !== data.opportunityId) {
     redirect(adminClientRedirect(data.clientId, `error=${encodeURIComponent("Client record was not found.")}`));
   }
+  const existingSale = existing.opportunity.sale;
 
   const phone = normalizePhone(data.phone);
   const firstVisitDate = toLocalDate(data.firstVisitDate);
+  if (existingSale && !data.membershipSaleDate) {
+    redirect(adminClientRedirect(data.clientId, `error=${encodeURIComponent("Membership sale date is required for a sold membership.")}`));
+  }
+  const membershipSaleDate = existingSale ? toLocalDate(data.membershipSaleDate!) : null;
+  const saleDateChanged = Boolean(
+    existingSale &&
+      membershipSaleDate &&
+      dateInputValue(existingSale.membershipSaleDate) !== dateInputValue(membershipSaleDate),
+  );
+  const firstVisitCredit = membershipSaleDate ? isFirstVisitSale(firstVisitDate, membershipSaleDate) : false;
   const lastFollowUpDate = optionalDate(data.lastFollowUpDate);
   const nextFollowUpDate = optionalDate(data.nextFollowUpDate);
   await prisma.$transaction(async (tx) => {
@@ -792,6 +811,35 @@ export async function updateClientRecordAction(formData: FormData) {
         nextFollowUpDate,
       },
     });
+    if (existingSale && membershipSaleDate) {
+      await tx.membershipSale.update({
+        where: { id: existingSale.id },
+        data: {
+          membershipSaleDate,
+          isFirstVisitSale: firstVisitCredit,
+        },
+      });
+      for (const credit of existingSale.credits) {
+        await tx.saleCredit.update({
+          where: { id: credit.id },
+          data: {
+            firstVisitCreditUnits: basisPointsToDecimalString(firstVisitCredit ? credit.creditBasisPoints : 0),
+          },
+        });
+      }
+      if (saleDateChanged) {
+        await tx.auditLog.create({
+          data: {
+            actingUser: role,
+            action: "MEMBERSHIP_SALE_DATE_EDITED",
+            recordType: "MembershipSale",
+            recordId: existingSale.id,
+            previousValue: dateInputValue(existingSale.membershipSaleDate),
+            newValue: dateInputValue(membershipSaleDate),
+          },
+        });
+      }
+    }
     await tx.auditLog.create({
       data: {
         actingUser: role,
@@ -809,6 +857,8 @@ export async function updateClientRecordAction(formData: FormData) {
   revalidatePath(`/opportunities/${data.opportunityId}`);
   revalidatePath("/");
   revalidatePath("/sales");
+  revalidatePath("/commissions");
+  revalidatePath("/month-end");
   redirect(adminClientRedirect(data.clientId, "clientUpdated=1"));
 }
 

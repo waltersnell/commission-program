@@ -1,12 +1,16 @@
 # Handoff
 
-Last updated: 2026-08-11
+Last updated: 2026-08-30
 
 ## Current State
 
 The app is a local Next.js/TypeScript/Prisma SQLite commission tracker for Thai Sport Bodyworks. It has login protection, local user management, administrator-managed commissionable staff, first-time client intake, opportunities, membership sales, commission summaries, and month-end flows.
 
 Latest in-progress flow: Hallmark-guided UI improvements for front desk speed and responsive technical use.
+
+- Membership sale dates are now independent from first-visit dates. The Sold Membership intake path collects the actual purchase date (defaulting to today) and uses it for the sale record and commission month.
+- First-visit credit is calculated only when the recorded sale date matches the first-visit date.
+- Administrator Client Lookup lists the sale date separately and exposes it in the record editor. Sale date corrections recalculate first-visit credit units and add a dedicated audit entry.
 
 - Installed and used the Hallmark skill from `nutlope/hallmark`.
 - Added durable design system files: `design.md`, `tokens.css`, `.hallmark/preflight.json`, and `.hallmark/log.json`.
@@ -63,7 +67,7 @@ Previous implemented flow: Dashboard and opportunity workflow updates for the ac
 Previous implemented flow: Add First Time Client has two submit paths.
 
 - `Create opportunity` creates the client/opportunity, shows `Opportunity is created`, and returns to Dashboard.
-- `Sold Membership` creates the client/opportunity, records a same-day membership sale, applies the existing first-visit $10 commission credit, shows `Good Job`, and returns to Dashboard.
+- `Sold Membership` creates the client/opportunity, records the explicitly entered purchase date, applies first-visit credit only when the purchase and first-visit dates match, shows `Good Job`, and returns to Dashboard.
 - Client Type options include `Resident`, `Long Term Visitor`, `Tourist`, `Prospect - Partner`, and `Prospect - Other`.
 
 ## Recent Decisions
