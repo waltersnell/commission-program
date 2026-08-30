@@ -30,6 +30,14 @@ export function ClientRecordEditor({ client, options }: { client: ClientRecord; 
         <Field label="Phone" name="phone" defaultValue={client.phoneDisplay} required inputMode="tel" />
         <Field label="Email" name="email" type="email" defaultValue={client.email ?? ""} />
         <Field label="First visit" name="firstVisitDate" type="date" defaultValue={dateInputValue(client.firstVisitDate)} required />
+        {opportunity.sale ? (
+          <Field label="Membership sale date" name="membershipSaleDate" type="date" defaultValue={dateInputValue(opportunity.sale.membershipSaleDate)} required />
+        ) : (
+          <div className="card card-soft grid gap-1 p-3">
+            <span className="text-sm font-semibold">Membership sale date</span>
+            <span className="text-sm text-[var(--text-muted)]">No membership sale recorded</span>
+          </div>
+        )}
         <SelectField label="Client type" name="clientType" defaultValue={client.clientType ?? ""} options={firstTimeClientTypes} />
         <SelectField label="Session" name="sessionType" defaultValue={client.sessionType ?? ""} options={firstTimeClientSessions} />
         <Field label="Other session" name="sessionOther" defaultValue={client.sessionOther ?? ""} />

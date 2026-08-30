@@ -3,6 +3,7 @@ export type NewClientFormValues = {
   phone: string;
   email: string;
   firstVisitDate: string;
+  membershipSaleDate: string;
   sessionType: string;
   sessionOther: string;
   clientType: string;
@@ -30,6 +31,7 @@ export const emptyNewClientFormValues: NewClientFormValues = {
   phone: "",
   email: "",
   firstVisitDate: "",
+  membershipSaleDate: "",
   sessionType: "",
   sessionOther: "",
   clientType: "",
@@ -57,6 +59,7 @@ export function newClientValuesFromFormData(formData: FormData): NewClientFormVa
     phone: stringValue(formData, "phone"),
     email: stringValue(formData, "email"),
     firstVisitDate: stringValue(formData, "firstVisitDate"),
+    membershipSaleDate: stringValue(formData, "membershipSaleDate"),
     sessionType: stringValue(formData, "sessionType"),
     sessionOther: stringValue(formData, "sessionOther"),
     clientType: stringValue(formData, "clientType"),

@@ -216,6 +216,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
                   <tr>
                     <th>Client</th>
                     <th>First Visit</th>
+                    <th>Sale Date</th>
                     <th>Location</th>
                     <th>Primary</th>
                     <th>Status</th>
@@ -227,6 +228,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
                     <tr key={client.id}>
                       <td>{client.firstName} {client.lastName}</td>
                       <td>{dateInputValue(client.firstVisitDate)}</td>
+                      <td>{client.opportunity?.sale ? dateInputValue(client.opportunity.sale.membershipSaleDate) : "-"}</td>
                       <td>{client.opportunity?.location.code ?? "-"}</td>
                       <td>{client.opportunity?.proposedPrimaryCloser.displayName ?? "-"}</td>
                       <td>{client.opportunity ? displayStatus(client.opportunity.status) : "-"}</td>
