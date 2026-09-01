@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
 ## Current State
 
@@ -11,6 +11,8 @@ Latest in-progress flow: Hallmark-guided UI improvements for front desk speed an
 - Membership sale dates are now independent from first-visit dates. The Sold Membership intake path collects the actual purchase date (defaulting to today) and uses it for the sale record and commission month.
 - First-visit credit is calculated only when the recorded sale date matches the first-visit date.
 - Administrator Client Lookup lists the sale date separately and exposes it in the record editor. Sale date corrections recalculate first-visit credit units and add a dedicated audit entry.
+- Administrator Client Lookup now synchronizes sold-record edits across the opportunity, membership sale, and sale credits. Changing primary or secondary closer rebuilds the full/split credit rows atomically and records a dedicated audit entry.
+- Commission-dependent paths are invalidated together after sale/client/approval/settings mutations. A lightweight signed-in refresh controller refreshes on browser focus, BFCache return, and every 30 seconds while visible to prevent stale production views.
 
 - Installed and used the Hallmark skill from `nutlope/hallmark`.
 - Added durable design system files: `design.md`, `tokens.css`, `.hallmark/preflight.json`, and `.hallmark/log.json`.
