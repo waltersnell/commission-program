@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/session";
 import { roleLabel } from "@/lib/roles";
 import { getNavItems } from "@/lib/navigation";
 import { DesktopNav } from "./desktop-nav";
+import { LiveDataRefresh } from "./live-data-refresh";
 import { MobileNav } from "./mobile-nav";
 import "./globals.css";
 
@@ -43,6 +44,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full`}>
       <body className="min-h-full" suppressHydrationWarning>
+        {!isAuthPage ? <LiveDataRefresh /> : null}
         {!isAuthPage ? (
           <header className="app-header">
             <div className="app-header-inner mx-auto max-w-7xl px-4 py-4">

@@ -45,6 +45,14 @@ export function isFirstVisitSale(firstVisitDate: Date, membershipSaleDate: Date)
   return dateInputValue(firstVisitDate) === dateInputValue(membershipSaleDate);
 }
 
+export function saleCloserAssignmentsChanged(
+  sale: { finalPrimaryCloserId: string; finalSupportCloserId: string | null },
+  primaryCloserId: string,
+  supportCloserId: string | null,
+) {
+  return sale.finalPrimaryCloserId !== primaryCloserId || sale.finalSupportCloserId !== supportCloserId;
+}
+
 export function createSaleCredits(input: {
   saleId: string;
   primaryStaffId: string;

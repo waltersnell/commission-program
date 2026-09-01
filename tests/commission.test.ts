@@ -5,6 +5,7 @@ import {
   calculateCommissionForStaff,
   createSaleCredits,
   isFirstVisitSale,
+  saleCloserAssignmentsChanged,
   sumCreditBasisPoints,
   type CommissionCreditInput,
 } from "../src/lib/commission";
@@ -111,6 +112,14 @@ describe("commission calculations", () => {
 
   it("does not mark a later sale as first-visit eligible", () => {
     expect(isFirstVisitSale(toLocalDate("2026-07-12"), toLocalDate("2026-07-13"))).toBe(false);
+  });
+
+  it("detects changes to final sale closer assignments", () => {
+    const sale = { finalPrimaryCloserId: "primary-a", finalSupportCloserId: "support-a" };
+
+    expect(saleCloserAssignmentsChanged(sale, "primary-a", "support-a")).toBe(false);
+    expect(saleCloserAssignmentsChanged(sale, "primary-b", "support-a")).toBe(true);
+    expect(saleCloserAssignmentsChanged(sale, "primary-a", null)).toBe(true);
   });
 
   it("does not count open opportunities toward commission", () => {

@@ -6,6 +6,7 @@ import {
   assertCanEditPeriod,
   createSaleCredits,
   isFirstVisitSale,
+  saleCloserAssignmentsChanged,
   settingsFromRows,
 } from "@/lib/commission";
 import { getCommissionSummary, saleMonthWhere } from "@/lib/data";
@@ -265,7 +266,7 @@ export async function createClientAction(_state: NewClientFormState = initialNew
     }
   });
 
-  revalidatePath("/");
+  revalidateCommissionData();
   revalidatePath("/opportunities");
   redirect(`/?message=${encodeURIComponent(soldMembership ? "Good Job" : "Opportunity is created")}`);
 }
@@ -485,7 +486,7 @@ export async function recordSaleAction(formData: FormData) {
     });
   });
 
-  revalidatePath("/");
+  revalidateCommissionData();
   revalidatePath("/opportunities");
   redirect(`/opportunities/${opportunity.id}?sale=1`);
 }
@@ -512,7 +513,7 @@ export async function approveSplitAction(formData: FormData) {
       },
     });
   });
-  revalidatePath("/month-end");
+  revalidateCommissionData();
   redirect("/month-end");
 }
 
@@ -712,9 +713,7 @@ export async function updateCommissionSettingAction(formData: FormData) {
     data: { value: normalizedValue },
   });
   await auditAdminChange(role, "COMMISSION_SETTING_EDITED", "CommissionSetting", setting.id, `${setting.label}: ${normalizedValue}`);
-  revalidatePath("/admin");
-  revalidatePath("/commissions");
-  revalidatePath("/month-end");
+  revalidateCommissionData();
   redirect("/admin?section=commission&settings=updated");
 }
 
@@ -768,6 +767,14 @@ export async function updateClientRecordAction(formData: FormData) {
     redirect(adminClientRedirect(data.clientId, `error=${encodeURIComponent("Membership sale date is required for a sold membership.")}`));
   }
   const membershipSaleDate = existingSale ? toLocalDate(data.membershipSaleDate!) : null;
+  const supportCloserId = data.proposedSupportCloserId || null;
+  const saleClosersChanged = Boolean(
+    existingSale &&
+      saleCloserAssignmentsChanged(existingSale, data.proposedPrimaryCloserId, supportCloserId),
+  );
+  const saleCreditSettings = saleClosersChanged
+    ? settingsFromRows(await prisma.commissionSetting.findMany())
+    : null;
   const saleDateChanged = Boolean(
     existingSale &&
       membershipSaleDate &&
@@ -800,7 +807,7 @@ export async function updateClientRecordAction(formData: FormData) {
         firstVisitTherapistId: data.firstVisitTherapistId || null,
         interestLevel: data.interestLevel,
         proposedPrimaryCloserId: data.proposedPrimaryCloserId,
-        proposedSupportCloserId: data.proposedSupportCloserId || null,
+        proposedSupportCloserId: supportCloserId,
         collectedBy: data.collectedBy,
         status: data.opportunityStatus,
         closureReason: data.closureReason || null,
@@ -815,15 +822,43 @@ export async function updateClientRecordAction(formData: FormData) {
       await tx.membershipSale.update({
         where: { id: existingSale.id },
         data: {
+          locationId: data.locationId,
           membershipSaleDate,
+          finalPrimaryCloserId: data.proposedPrimaryCloserId,
+          finalSupportCloserId: supportCloserId,
           isFirstVisitSale: firstVisitCredit,
         },
       });
-      for (const credit of existingSale.credits) {
-        await tx.saleCredit.update({
-          where: { id: credit.id },
+      if (saleClosersChanged && saleCreditSettings) {
+        await tx.saleCredit.deleteMany({ where: { saleId: existingSale.id } });
+        await tx.saleCredit.createMany({
+          data: createSaleCredits({
+            saleId: existingSale.id,
+            primaryStaffId: data.proposedPrimaryCloserId,
+            supportStaffId: supportCloserId,
+            isFirstVisitSale: firstVisitCredit,
+            settings: saleCreditSettings,
+          }),
+        });
+      } else {
+        for (const credit of existingSale.credits) {
+          await tx.saleCredit.update({
+            where: { id: credit.id },
+            data: {
+              firstVisitCreditUnits: basisPointsToDecimalString(firstVisitCredit ? credit.creditBasisPoints : 0),
+            },
+          });
+        }
+      }
+      if (saleClosersChanged) {
+        await tx.auditLog.create({
           data: {
-            firstVisitCreditUnits: basisPointsToDecimalString(firstVisitCredit ? credit.creditBasisPoints : 0),
+            actingUser: role,
+            action: "MEMBERSHIP_SALE_CLOSERS_EDITED",
+            recordType: "MembershipSale",
+            recordId: existingSale.id,
+            previousValue: `${existingSale.finalPrimaryCloserId}/${existingSale.finalSupportCloserId ?? ""}`,
+            newValue: `${data.proposedPrimaryCloserId}/${supportCloserId ?? ""}`,
           },
         });
       }
@@ -852,13 +887,9 @@ export async function updateClientRecordAction(formData: FormData) {
     });
   });
 
-  revalidatePath("/admin");
+  revalidateCommissionData();
   revalidatePath("/opportunities");
   revalidatePath(`/opportunities/${data.opportunityId}`);
-  revalidatePath("/");
-  revalidatePath("/sales");
-  revalidatePath("/commissions");
-  revalidatePath("/month-end");
   redirect(adminClientRedirect(data.clientId, "clientUpdated=1"));
 }
 
@@ -900,10 +931,8 @@ export async function deleteClientRecordAction(formData: FormData) {
     await tx.client.delete({ where: { id: client.id } });
   });
 
-  revalidatePath("/admin");
+  revalidateCommissionData();
   revalidatePath("/opportunities");
-  revalidatePath("/");
-  revalidatePath("/sales");
   redirect("/admin?section=clients&clientDeleted=1");
 }
 
@@ -1058,4 +1087,12 @@ function optionalDate(value: string | undefined) {
 
 function adminClientRedirect(clientId: string, query: string) {
   return `/admin?section=clients&clientId=${encodeURIComponent(clientId)}&${query}#client-editor`;
+}
+
+function revalidateCommissionData() {
+  revalidatePath("/");
+  revalidatePath("/sales");
+  revalidatePath("/commissions");
+  revalidatePath("/month-end");
+  revalidatePath("/admin");
 }

@@ -57,15 +57,15 @@ export function ClientRecordEditor({ client, options }: { client: ClientRecord; 
         />
         <SelectField label="Interest level" name="interestLevel" defaultValue={opportunity.interestLevel} options={interestLevels} />
         <SelectField
-          label="Primary closer"
+          label={opportunity.sale ? "Primary closer / sale credit" : "Primary closer"}
           name="proposedPrimaryCloserId"
-          defaultValue={opportunity.proposedPrimaryCloserId}
+          defaultValue={opportunity.sale?.finalPrimaryCloserId ?? opportunity.proposedPrimaryCloserId}
           options={options.staff.map((person) => ({ value: person.id, label: person.displayName }))}
         />
         <SelectField
-          label="Secondary closer"
+          label={opportunity.sale ? "Secondary closer / sale credit" : "Secondary closer"}
           name="proposedSupportCloserId"
-          defaultValue={opportunity.proposedSupportCloserId ?? ""}
+          defaultValue={opportunity.sale?.finalSupportCloserId ?? opportunity.proposedSupportCloserId ?? ""}
           options={options.staff.map((person) => ({ value: person.id, label: person.displayName }))}
           includeNone
         />
