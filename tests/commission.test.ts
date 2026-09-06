@@ -4,18 +4,21 @@ import {
   calculateCommissionByStaff,
   calculateCommissionForStaff,
   createSaleCredits,
+  defaultCommissionSettings,
   isFirstVisitSale,
   saleCloserAssignmentsChanged,
   sumCreditBasisPoints,
   type CommissionCreditInput,
 } from "../src/lib/commission";
 import { clientEntrySchema, opportunityCloserSchema, saleEntrySchema } from "../src/lib/validation";
-import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, monthRange, toLocalDate } from "../src/lib/format";
+import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, formatDisplayDate, monthRange, toLocalDate } from "../src/lib/format";
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
 import { summarizePendingSalesByStaff } from "../src/lib/data";
 import { getNavItems, isActivePath } from "../src/lib/navigation";
 import { staffMatchesUser } from "../src/lib/current-staff";
 import { newClientValuesFromFormData, splitClientName } from "../src/lib/client-form-state";
+import { isSpecialSpiffAvailableForDate } from "../src/lib/special-spiffs";
+import { calculatePayrollMembershipItems, parsePayrollRange, payrollMonthKeys } from "../src/lib/payroll";
 
 const staffId = "staff-a";
 
@@ -23,13 +26,15 @@ function credit(input: Partial<CommissionCreditInput> & { creditBasisPoints?: nu
   const index = input.index ?? 1;
   const saleDate = input.saleDate ?? toLocalDate(`2026-07-${String(index).padStart(2, "0")}`);
   return {
-    id: `credit-${index}`,
+    id: input.id ?? `credit-${index}`,
     saleId: input.saleId ?? `sale-${String(index).padStart(3, "0")}`,
     staffId: input.staffId ?? staffId,
     saleDate,
     saleCreatedAt: input.saleCreatedAt ?? new Date(`${saleDate.toISOString().slice(0, 10)}T12:00:00`),
     creditBasisPoints: input.creditBasisPoints ?? 10000,
     firstVisitCreditBasisPoints: input.firstVisitCreditBasisPoints ?? 0,
+    payoutBasisPoints: input.payoutBasisPoints ?? input.creditBasisPoints ?? 10000,
+    fixedCommissionCents: input.fixedCommissionCents ?? 0,
     approvalStatus: input.approvalStatus ?? "APPROVED",
     opportunityStatus: input.opportunityStatus ?? "MEMBERSHIP_SOLD",
   };
@@ -164,7 +169,11 @@ describe("Pacific business dates", () => {
   });
 
   it("displays timestamps in Pacific time", () => {
-    expect(formatDateTime(new Date("2026-08-02T05:30:00.000Z"))).toContain("Aug 1, 2026");
+    expect(formatDateTime(new Date("2026-08-02T05:30:00.000Z"))).toBe("01/08/2026 22:30");
+  });
+
+  it("displays date-only values as day, month, year", () => {
+    expect(formatDisplayDate(toLocalDate("2026-09-05"))).toBe("05/09/2026");
   });
 });
 
@@ -204,6 +213,40 @@ describe("month-end pending review", () => {
         pendingFirstVisitCreditBasisPoints: 3000,
       },
     ]);
+  });
+});
+
+describe("payroll reporting", () => {
+  it("requires a complete valid inclusive date range", () => {
+    expect(parsePayrollRange("2026-08-01", undefined).error).toBe("Select both payroll period dates.");
+    expect(parsePayrollRange("2026-08-31", "2026-08-01").error).toContain("on or after");
+    expect(parsePayrollRange("2026-02-30", "2026-03-01").error).toBe("Enter valid payroll period dates.");
+    const parsed = parsePayrollRange("2026-08-15", "2026-09-14");
+    expect(parsed.range?.endExclusive.toISOString()).toBe("2026-09-15T00:00:00.000Z");
+    expect(parsed.range ? payrollMonthKeys(parsed.range) : []).toEqual(["2026-08", "2026-09"]);
+  });
+
+  it("keeps approved and pending line calculations separate", () => {
+    const input = [...credits(10), credit({ index: 11, approvalStatus: "PENDING" }), credit({ index: 12, approvalStatus: "REJECTED" })];
+    const calculations = calculatePayrollMembershipItems(staffId, input, defaultCommissionSettings);
+    expect(calculations.get("credit-10")?.totalCommissionCents).toBe(2500);
+    expect(calculations.get("credit-11")?.totalCommissionCents).toBe(3000);
+    expect(calculations.get("credit-12")?.totalCommissionCents).toBe(3000);
+  });
+
+  it("resets progressive tiers at each calendar month", () => {
+    const august = credit({ id: "august-credit", saleId: "august-sale", saleDate: toLocalDate("2026-08-01") });
+    const calculations = calculatePayrollMembershipItems(staffId, [...credits(10), august], defaultCommissionSettings);
+    expect(calculations.get("august-credit")?.tierLabel).toBe("Tier 1");
+    expect(calculations.get("august-credit")?.totalCommissionCents).toBe(2500);
+  });
+});
+
+describe("Special Spiff availability", () => {
+  it("allows active spiffs through their end date", () => {
+    const spiff = { active: true, endDate: toLocalDate("2026-09-05") };
+    expect(isSpecialSpiffAvailableForDate(spiff, toLocalDate("2026-09-05"))).toBe(true);
+    expect(isSpecialSpiffAvailableForDate(spiff, toLocalDate("2026-09-06"))).toBe(false);
   });
 });
 

@@ -13,6 +13,7 @@ import { crmStepKeys } from "./crm-steps";
 
 const requiredString = z.string().trim().min(1, "This field is required.");
 const optionalString = z.string().trim().optional().or(z.literal(""));
+const dateString = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
 
 const clientEntryFields = {
   phone: z.string().trim().min(1, "Phone number is required."),
@@ -140,6 +141,7 @@ export const userCreateSchema = z
     phone: requiredString,
     email: z.string().trim().email("Enter a valid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."),
+    staffId: optionalString,
   })
   .superRefine((data, ctx) => {
     const phone = normalizePhone(data.phone);
@@ -157,6 +159,7 @@ export const userEditSchema = z
     email: z.string().trim().email("Enter a valid email address."),
     password: z.string().optional(),
     active: z.string().optional(),
+    staffId: optionalString,
   })
   .superRefine((data, ctx) => {
     const phone = normalizePhone(data.phone);
@@ -175,6 +178,50 @@ export const userDeactivateSchema = z.object({
 export const commissionSettingSchema = z.object({
   settingId: requiredString,
   value: requiredString,
+});
+
+export const membershipTypeCreateSchema = z.object({
+  name: requiredString,
+});
+
+export const membershipTypeEditSchema = z.object({
+  membershipTypeId: requiredString,
+  name: requiredString,
+  active: z.enum(["true", "false"]),
+});
+
+export const specialSpiffCreateSchema = z.object({
+  name: requiredString,
+  functionDescription: requiredString,
+  amount: requiredString,
+  endDate: dateString.optional().or(z.literal("")),
+});
+
+export const specialSpiffEditSchema = z.object({
+  specialSpiffId: requiredString,
+  name: requiredString,
+  functionDescription: requiredString,
+  amount: requiredString,
+  endDate: dateString.optional().or(z.literal("")),
+  active: z.enum(["true", "false"]),
+});
+
+export const specialSpiffDeleteSchema = z.object({
+  specialSpiffId: requiredString,
+});
+
+export const specialSpiffAwardSchema = z.object({
+  opportunityId: requiredString,
+  specialSpiffId: requiredString,
+  staffId: optionalString,
+  locationId: requiredString,
+  activityDate: dateString,
+  notes: optionalString,
+});
+
+export const specialSpiffApprovalSchema = z.object({
+  specialSpiffAwardId: requiredString,
+  approval: z.enum(["APPROVED", "REJECTED"]),
 });
 
 export const crmStepTemplateSchema = z.object({

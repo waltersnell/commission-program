@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getFormOptions, getMembershipSales } from "@/lib/data";
-import { dateInputValue, displayStatus, formatBasisPointsPercent, formatCreditBasisPoints, monthKey } from "@/lib/format";
+import { displayStatus, formatBasisPointsPercent, formatCreditBasisPoints, formatDisplayDate, monthKey } from "@/lib/format";
 import { sumCreditBasisPoints } from "@/lib/commission";
 import { findStaffForUser } from "@/lib/current-staff";
 import { canManage } from "@/lib/roles";
@@ -84,7 +84,7 @@ export default async function SalesPage({ searchParams }: PageProps) {
                       {sale.opportunity.client.firstName} {sale.opportunity.client.lastName}
                     </Link>
                   </td>
-                  <td>{dateInputValue(sale.membershipSaleDate)}</td>
+                  <td>{formatDisplayDate(sale.membershipSaleDate)}</td>
                   <td>{sale.location.code}</td>
                   <td>{sale.membershipType.name}</td>
                   <td>{sale.finalPrimaryCloser.displayName}</td>

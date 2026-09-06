@@ -7,6 +7,7 @@ export const defaultCommissionSettings = {
   tier2RateCents: 3000,
   tier3RateCents: 4000,
   firstVisitBonusCents: 1000,
+  familyUpgradeSpiffCents: 1000,
   primarySplitBasisPoints: 7000,
   supportSplitBasisPoints: 3000,
 };
@@ -22,6 +23,8 @@ export type CommissionCreditInput = {
   saleCreatedAt: Date;
   creditBasisPoints: number;
   firstVisitCreditBasisPoints: number;
+  payoutBasisPoints: number;
+  fixedCommissionCents: number;
   approvalStatus: string;
   opportunityStatus: string;
 };
@@ -35,10 +38,26 @@ export type StaffCommissionResult = {
   firstVisitCreditBasisPoints: number;
   baseCommissionCents: number;
   firstVisitBonusCents: number;
+  membershipSpiffCents: number;
+  specialSpiffCents: number;
   adjustmentsCents: number;
   finalCommissionCents: number;
   currentTier: string;
   creditsToNextTierBasisPoints: number;
+};
+
+export type CommissionLineItem = {
+  creditId: string;
+  saleId: string;
+  saleDate: Date;
+  creditBasisPoints: number;
+  payoutBasisPoints: number;
+  firstVisitCreditBasisPoints: number;
+  tierLabel: string;
+  baseCommissionCents: number;
+  firstVisitBonusCents: number;
+  membershipSpiffCents: number;
+  totalCommissionCents: number;
 };
 
 export function isFirstVisitSale(firstVisitDate: Date, membershipSaleDate: Date) {
@@ -58,17 +77,44 @@ export function createSaleCredits(input: {
   primaryStaffId: string;
   supportStaffId?: string | null;
   isFirstVisitSale: boolean;
+  fixedCommissionCents?: number;
   settings?: CommissionSettings;
 }) {
   const settings = input.settings ?? defaultCommissionSettings;
+  const isFixedCommission = input.fixedCommissionCents !== undefined;
   if (input.supportStaffId) {
+    const primaryFixedCents = isFixedCommission
+      ? Math.round((input.fixedCommissionCents ?? 0) * settings.primarySplitBasisPoints / 10000)
+      : 0;
+    const supportFixedCents = isFixedCommission ? (input.fixedCommissionCents ?? 0) - primaryFixedCents : 0;
     return [
-      creditRow(input.saleId, input.primaryStaffId, settings.primarySplitBasisPoints, input.isFirstVisitSale),
-      creditRow(input.saleId, input.supportStaffId, settings.supportSplitBasisPoints, input.isFirstVisitSale),
+      creditRow({
+        saleId: input.saleId,
+        staffId: input.primaryStaffId,
+        creditBasisPoints: isFixedCommission ? 0 : settings.primarySplitBasisPoints,
+        payoutBasisPoints: settings.primarySplitBasisPoints,
+        isFirstVisit: input.isFirstVisitSale && !isFixedCommission,
+        fixedCommissionCents: primaryFixedCents,
+      }),
+      creditRow({
+        saleId: input.saleId,
+        staffId: input.supportStaffId,
+        creditBasisPoints: isFixedCommission ? 0 : settings.supportSplitBasisPoints,
+        payoutBasisPoints: settings.supportSplitBasisPoints,
+        isFirstVisit: input.isFirstVisitSale && !isFixedCommission,
+        fixedCommissionCents: supportFixedCents,
+      }),
     ];
   }
 
-  return [creditRow(input.saleId, input.primaryStaffId, 10000, input.isFirstVisitSale)];
+  return [creditRow({
+    saleId: input.saleId,
+    staffId: input.primaryStaffId,
+    creditBasisPoints: isFixedCommission ? 0 : 10000,
+    payoutBasisPoints: 10000,
+    isFirstVisit: input.isFirstVisitSale && !isFixedCommission,
+    fixedCommissionCents: input.fixedCommissionCents ?? 0,
+  })];
 }
 
 export function calculateCommissionForStaff(
@@ -76,54 +122,86 @@ export function calculateCommissionForStaff(
   credits: CommissionCreditInput[],
   settings: CommissionSettings = defaultCommissionSettings,
 ): StaffCommissionResult {
-  const eligibleCredits = credits
-    .filter((credit) => credit.staffId === staffId)
-    .filter((credit) => credit.approvalStatus === "APPROVED")
-    .filter((credit) => credit.opportunityStatus === "MEMBERSHIP_SOLD")
-    .sort(sortCreditsChronologically);
-
-  let consumedBasisPoints = 0;
-  let baseCommissionCents = 0;
+  const lineItems = calculateCommissionLineItemsForStaff(staffId, credits, settings);
   let totalCreditBasisPoints = 0;
   let firstVisitCreditBasisPoints = 0;
   let fullSaleCount = 0;
   let splitCreditBasisPoints = 0;
+  let baseCommissionCents = 0;
+  let firstVisitBonusCents = 0;
+  let membershipSpiffCents = 0;
 
-  for (const credit of eligibleCredits) {
-    totalCreditBasisPoints += credit.creditBasisPoints;
-    firstVisitCreditBasisPoints += credit.firstVisitCreditBasisPoints;
-    if (credit.creditBasisPoints === 10000) {
+  for (const item of lineItems) {
+    totalCreditBasisPoints += item.creditBasisPoints;
+    firstVisitCreditBasisPoints += item.firstVisitCreditBasisPoints;
+    baseCommissionCents += item.baseCommissionCents;
+    firstVisitBonusCents += item.firstVisitBonusCents;
+    membershipSpiffCents += item.membershipSpiffCents;
+    if (item.creditBasisPoints === 10000) {
       fullSaleCount += 1;
-    } else {
-      splitCreditBasisPoints += credit.creditBasisPoints;
-    }
-
-    let remaining = credit.creditBasisPoints;
-    while (remaining > 0) {
-      const tier = tierForConsumedCredits(consumedBasisPoints, settings);
-      const chunk = Math.min(remaining, tier.remainingBasisPoints);
-      baseCommissionCents += prorateCents(chunk, tier.rateCents);
-      consumedBasisPoints += chunk;
-      remaining -= chunk;
+    } else if (item.creditBasisPoints > 0) {
+      splitCreditBasisPoints += item.creditBasisPoints;
     }
   }
 
-  const firstVisitBonusCents = prorateCents(firstVisitCreditBasisPoints, settings.firstVisitBonusCents);
-
   return {
     staffId,
-    staffName: eligibleCredits[0]?.staffName,
+    staffName: credits.find((credit) => credit.staffId === staffId)?.staffName,
     fullSaleCount,
     splitCreditBasisPoints,
     totalCreditBasisPoints,
     firstVisitCreditBasisPoints,
     baseCommissionCents,
     firstVisitBonusCents,
+    membershipSpiffCents,
+    specialSpiffCents: 0,
     adjustmentsCents: 0,
-    finalCommissionCents: baseCommissionCents + firstVisitBonusCents,
+    finalCommissionCents: baseCommissionCents + firstVisitBonusCents + membershipSpiffCents,
     currentTier: currentTierLabel(totalCreditBasisPoints, settings),
     creditsToNextTierBasisPoints: creditsToNextTier(totalCreditBasisPoints, settings),
   };
+}
+
+export function calculateCommissionLineItemsForStaff(
+  staffId: string,
+  credits: CommissionCreditInput[],
+  settings: CommissionSettings = defaultCommissionSettings,
+): CommissionLineItem[] {
+  const eligibleCredits = credits
+    .filter((credit) => credit.staffId === staffId)
+    .filter((credit) => credit.approvalStatus === "APPROVED")
+    .filter((credit) => credit.opportunityStatus === "MEMBERSHIP_SOLD")
+    .sort(sortCreditsChronologically);
+  let consumedBasisPoints = 0;
+
+  return eligibleCredits.map((credit) => {
+    let remaining = credit.creditBasisPoints;
+    let baseCommissionCents = 0;
+    const tierLabels = new Set<string>();
+    while (remaining > 0) {
+      const tier = tierForConsumedCredits(consumedBasisPoints, settings);
+      const chunk = Math.min(remaining, tier.remainingBasisPoints);
+      tierLabels.add(tier.label);
+      baseCommissionCents += prorateCents(chunk, tier.rateCents);
+      consumedBasisPoints += chunk;
+      remaining -= chunk;
+    }
+    const firstVisitBonusCents = prorateCents(credit.firstVisitCreditBasisPoints, settings.firstVisitBonusCents);
+    const membershipSpiffCents = credit.fixedCommissionCents;
+    return {
+      creditId: credit.id,
+      saleId: credit.saleId,
+      saleDate: credit.saleDate,
+      creditBasisPoints: credit.creditBasisPoints,
+      payoutBasisPoints: credit.payoutBasisPoints,
+      firstVisitCreditBasisPoints: credit.firstVisitCreditBasisPoints,
+      tierLabel: tierLabels.size > 0 ? Array.from(tierLabels).join(" / ") : "Not tier eligible",
+      baseCommissionCents,
+      firstVisitBonusCents,
+      membershipSpiffCents,
+      totalCommissionCents: baseCommissionCents + firstVisitBonusCents + membershipSpiffCents,
+    };
+  });
 }
 
 export function calculateCommissionByStaff(
@@ -151,6 +229,7 @@ export function settingsFromRows(rows: { key: string; value: string }[]): Commis
     tier2RateCents: Number(byKey["tier2.rateCents"] ?? 3000),
     tier3RateCents: Number(byKey["tier3.rateCents"] ?? 4000),
     firstVisitBonusCents: Number(byKey["firstVisitBonusCents"] ?? 1000),
+    familyUpgradeSpiffCents: Number(byKey["familyUpgradeSpiffCents"] ?? 1000),
     primarySplitBasisPoints: Number(byKey["primarySplitBasisPoints"] ?? 7000),
     supportSplitBasisPoints: Number(byKey["supportSplitBasisPoints"] ?? 3000),
   };
@@ -163,13 +242,22 @@ export function assertCanEditPeriod(role: string, periodStatus?: string) {
   return role === "ADMINISTRATOR";
 }
 
-function creditRow(saleId: string, staffId: string, basisPoints: number, isFirstVisit: boolean) {
+function creditRow(input: {
+  saleId: string;
+  staffId: string;
+  creditBasisPoints: number;
+  payoutBasisPoints: number;
+  isFirstVisit: boolean;
+  fixedCommissionCents: number;
+}) {
   return {
-    saleId,
-    staffId,
-    creditBasisPoints: basisPoints,
-    creditUnits: basisPointsToDecimalString(basisPoints),
-    firstVisitCreditUnits: basisPointsToDecimalString(isFirstVisit ? basisPoints : 0),
+    saleId: input.saleId,
+    staffId: input.staffId,
+    creditBasisPoints: input.creditBasisPoints,
+    creditUnits: basisPointsToDecimalString(input.creditBasisPoints),
+    firstVisitCreditUnits: basisPointsToDecimalString(input.isFirstVisit ? input.creditBasisPoints : 0),
+    payoutBasisPoints: input.payoutBasisPoints,
+    fixedCommissionCents: input.fixedCommissionCents,
   };
 }
 
@@ -184,17 +272,20 @@ function sortCreditsChronologically(a: CommissionCreditInput, b: CommissionCredi
 function tierForConsumedCredits(consumedBasisPoints: number, settings: CommissionSettings) {
   if (consumedBasisPoints < settings.tier1UpperBasisPoints) {
     return {
+      label: "Tier 1",
       remainingBasisPoints: settings.tier1UpperBasisPoints - consumedBasisPoints,
       rateCents: settings.tier1RateCents,
     };
   }
   if (consumedBasisPoints < settings.tier2UpperBasisPoints) {
     return {
+      label: "Tier 2",
       remainingBasisPoints: settings.tier2UpperBasisPoints - consumedBasisPoints,
       rateCents: settings.tier2RateCents,
     };
   }
   return {
+    label: "Tier 3",
     remainingBasisPoints: Number.MAX_SAFE_INTEGER,
     rateCents: settings.tier3RateCents,
   };

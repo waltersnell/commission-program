@@ -8,102 +8,109 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  username    String   @unique
-  displayName String
-  role        String
+  id              String   @id @default(cuid())
+  username        String   @unique
+  displayName     String
+  role            String
   phoneNormalized String?
   phoneDisplay    String?
-  email       String?
-  passwordHash String?
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  email           String?
+  passwordHash    String?
+  active          Boolean  @default(true)
+  staffId         String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  staff           Staff?   @relation(fields: [staffId], references: [id])
 }
 
 model Staff {
-  id          String       @id @default(cuid())
-  firstName   String
-  lastName    String?
-  displayName String
-  active      Boolean      @default(true)
-  role        String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  primaryOpportunities MembershipOpportunity[] @relation("ProposedPrimaryCloser")
-  supportOpportunities MembershipOpportunity[] @relation("ProposedSupportCloser")
+  id                     String                  @id @default(cuid())
+  firstName              String
+  lastName               String?
+  displayName            String
+  active                 Boolean                 @default(true)
+  role                   String
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  primaryOpportunities   MembershipOpportunity[] @relation("ProposedPrimaryCloser")
+  supportOpportunities   MembershipOpportunity[] @relation("ProposedSupportCloser")
   therapistOpportunities MembershipOpportunity[] @relation("FirstVisitTherapist")
-  primarySales MembershipSale[] @relation("FinalPrimaryCloser")
-  supportSales MembershipSale[] @relation("FinalSupportCloser")
-  saleCredits SaleCredit[]
-  commissionResults CommissionResult[]
+  primarySales           MembershipSale[]        @relation("FinalPrimaryCloser")
+  supportSales           MembershipSale[]        @relation("FinalSupportCloser")
+  saleCredits            SaleCredit[]
+  commissionResults      CommissionResult[]
+  specialSpiffAwards     SpecialSpiffAward[]
+  user                   User?
 }
 
 model Location {
-  id            String   @id @default(cuid())
-  code          String   @unique
-  name          String
-  active        Boolean  @default(true)
-  opportunities MembershipOpportunity[]
-  sales         MembershipSale[]
+  id                 String                  @id @default(cuid())
+  code               String                  @unique
+  name               String
+  active             Boolean                 @default(true)
+  opportunities      MembershipOpportunity[]
+  sales              MembershipSale[]
+  specialSpiffAwards SpecialSpiffAward[]
 }
 
 model MembershipType {
-  id     String @id @default(cuid())
-  name   String @unique
-  active Boolean @default(true)
-  sales  MembershipSale[]
+  id             String           @id @default(cuid())
+  name           String           @unique
+  active         Boolean          @default(true)
+  commissionKind String           @default("STANDARD")
+  sales          MembershipSale[]
 }
 
 model Client {
-  id              String   @id @default(cuid())
-  firstName       String
-  lastName        String
-  phoneNormalized String
-  phoneDisplay    String
-  email           String?
-  firstVisitDate  DateTime
-  sessionType     String?
-  sessionOther    String?
-  clientType      String?
-  primaryIssue    String?
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  opportunity     MembershipOpportunity?
+  id                 String                 @id @default(cuid())
+  firstName          String
+  lastName           String
+  phoneNormalized    String
+  phoneDisplay       String
+  email              String?
+  firstVisitDate     DateTime
+  sessionType        String?
+  sessionOther       String?
+  clientType         String?
+  primaryIssue       String?
+  notes              String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  opportunity        MembershipOpportunity?
+  specialSpiffAwards SpecialSpiffAward[]
 
   @@index([phoneNormalized])
   @@index([firstName, lastName, firstVisitDate])
 }
 
 model MembershipOpportunity {
-  id                      String   @id @default(cuid())
-  clientId                String   @unique
+  id                      String    @id @default(cuid())
+  clientId                String    @unique
   locationId              String
   firstVisitTherapistId   String?
   proposedPrimaryCloserId String
   proposedSupportCloserId String?
-  collectedBy             String   @default("Primary Closer")
-  status                  String   @default("OPEN")
-  interestLevel           String   @default("None")
+  collectedBy             String    @default("Primary Closer")
+  status                  String    @default("OPEN")
+  interestLevel           String    @default("None")
   closureReason           String?
   closureNote             String?
   lastFollowUpDate        DateTime?
   nextFollowUpDate        DateTime?
   followUpOwnerId         String?
-  followUpStatus          String   @default("Follow Up Needed")
+  followUpStatus          String    @default("Follow Up Needed")
   followUpNotes           String?
   intakeSubmittedAt       DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
-  firstVisitTherapist Staff? @relation("FirstVisitTherapist", fields: [firstVisitTherapistId], references: [id])
-  proposedPrimaryCloser Staff @relation("ProposedPrimaryCloser", fields: [proposedPrimaryCloserId], references: [id])
-  proposedSupportCloser Staff? @relation("ProposedSupportCloser", fields: [proposedSupportCloserId], references: [id])
-  sale MembershipSale?
-  followUps FollowUp[]
+  client                Client          @relation(fields: [clientId], references: [id])
+  location              Location        @relation(fields: [locationId], references: [id])
+  firstVisitTherapist   Staff?          @relation("FirstVisitTherapist", fields: [firstVisitTherapistId], references: [id])
+  proposedPrimaryCloser Staff           @relation("ProposedPrimaryCloser", fields: [proposedPrimaryCloserId], references: [id])
+  proposedSupportCloser Staff?          @relation("ProposedSupportCloser", fields: [proposedSupportCloserId], references: [id])
+  sale                  MembershipSale?
+  followUps             FollowUp[]
 
   @@index([status])
   @@index([locationId])
@@ -112,25 +119,25 @@ model MembershipOpportunity {
 }
 
 model MembershipSale {
-  id                    String   @id @default(cuid())
-  opportunityId         String   @unique
-  locationId            String
-  membershipSaleDate    DateTime
-  membershipTypeId      String
-  finalPrimaryCloserId  String
-  finalSupportCloserId  String?
-  approvalStatus        String   @default("PENDING")
-  isFirstVisitSale      Boolean
-  notes                 String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  opportunityId        String   @unique
+  locationId           String
+  membershipSaleDate   DateTime
+  membershipTypeId     String
+  finalPrimaryCloserId String
+  finalSupportCloserId String?
+  approvalStatus       String   @default("PENDING")
+  isFirstVisitSale     Boolean
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  opportunity MembershipOpportunity @relation(fields: [opportunityId], references: [id])
-  location Location @relation(fields: [locationId], references: [id])
-  membershipType MembershipType @relation(fields: [membershipTypeId], references: [id])
-  finalPrimaryCloser Staff @relation("FinalPrimaryCloser", fields: [finalPrimaryCloserId], references: [id])
-  finalSupportCloser Staff? @relation("FinalSupportCloser", fields: [finalSupportCloserId], references: [id])
-  credits SaleCredit[]
+  opportunity        MembershipOpportunity @relation(fields: [opportunityId], references: [id])
+  location           Location              @relation(fields: [locationId], references: [id])
+  membershipType     MembershipType        @relation(fields: [membershipTypeId], references: [id])
+  finalPrimaryCloser Staff                 @relation("FinalPrimaryCloser", fields: [finalPrimaryCloserId], references: [id])
+  finalSupportCloser Staff?                @relation("FinalSupportCloser", fields: [finalSupportCloserId], references: [id])
+  credits            SaleCredit[]
 
   @@index([membershipSaleDate])
   @@index([approvalStatus])
@@ -143,11 +150,13 @@ model SaleCredit {
   staffId               String
   creditBasisPoints     Int
   creditUnits           Decimal
-  firstVisitCreditUnits Decimal @default(0)
+  firstVisitCreditUnits Decimal  @default(0)
+  payoutBasisPoints     Int      @default(10000)
+  fixedCommissionCents  Int      @default(0)
   createdAt             DateTime @default(now())
 
-  sale MembershipSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  staff Staff @relation(fields: [staffId], references: [id])
+  sale  MembershipSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  staff Staff          @relation(fields: [staffId], references: [id])
 
   @@unique([saleId, staffId])
   @@index([staffId])
@@ -166,45 +175,47 @@ model FollowUp {
 }
 
 model CommissionPeriod {
-  id        String   @id @default(cuid())
-  month     String   @unique
-  status    String   @default("OPEN")
+  id          String             @id @default(cuid())
+  month       String             @unique
+  status      String             @default("OPEN")
   finalizedAt DateTime?
   reopenedAt  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  results   CommissionResult[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  results     CommissionResult[]
 }
 
 model CommissionResult {
-  id                     String   @id @default(cuid())
-  periodId               String
-  staffId                String
-  fullSaleCount          Int
-  splitCreditUnits       Decimal
-  totalCredits           Decimal
-  firstVisitCredits      Decimal
-  baseCommissionCents    Int
-  firstVisitBonusCents   Int
-  adjustmentsCents       Int      @default(0)
-  finalCommissionCents   Int
-  approvalStatus         String   @default("FINAL")
-  createdAt              DateTime @default(now())
+  id                   String   @id @default(cuid())
+  periodId             String
+  staffId              String
+  fullSaleCount        Int
+  splitCreditUnits     Decimal
+  totalCredits         Decimal
+  firstVisitCredits    Decimal
+  baseCommissionCents  Int
+  firstVisitBonusCents Int
+  membershipSpiffCents Int      @default(0)
+  specialSpiffCents    Int      @default(0)
+  adjustmentsCents     Int      @default(0)
+  finalCommissionCents Int
+  approvalStatus       String   @default("FINAL")
+  createdAt            DateTime @default(now())
 
   period CommissionPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  staff Staff @relation(fields: [staffId], references: [id])
+  staff  Staff            @relation(fields: [staffId], references: [id])
 
   @@unique([periodId, staffId])
 }
 
 model CommissionSetting {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  label       String
-  value       String
-  editableBy  String   @default("ADMINISTRATOR")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  key        String   @unique
+  label      String
+  value      String
+  editableBy String   @default("ADMINISTRATOR")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model CrmStepTemplate {
@@ -215,6 +226,45 @@ model CrmStepTemplate {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model SpecialSpiff {
+  id                  String              @id @default(cuid())
+  name                String              @unique
+  functionDescription String
+  amountCents         Int
+  endDate             DateTime?
+  active              Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  awards              SpecialSpiffAward[]
+}
+
+model SpecialSpiffAward {
+  id                          String   @id @default(cuid())
+  specialSpiffId              String
+  clientId                    String
+  staffId                     String
+  locationId                  String
+  activityDate                DateTime
+  approvalStatus              String   @default("PENDING")
+  spiffNameSnapshot           String
+  functionDescriptionSnapshot String
+  amountCentsSnapshot         Int
+  notes                       String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  specialSpiff SpecialSpiff @relation(fields: [specialSpiffId], references: [id])
+  client       Client       @relation(fields: [clientId], references: [id])
+  staff        Staff        @relation(fields: [staffId], references: [id])
+  location     Location     @relation(fields: [locationId], references: [id])
+
+  @@unique([specialSpiffId, clientId])
+  @@index([activityDate])
+  @@index([approvalStatus])
+  @@index([staffId])
+  @@index([clientId])
 }
 
 model AuditLog {

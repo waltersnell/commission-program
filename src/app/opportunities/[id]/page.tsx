@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { closeOpportunityAction, recordSaleAction, updateOpportunityClosersAction } from "@/app/actions";
-import { getFormOptions, getOpportunity } from "@/lib/data";
-import { currentDateInputValue, dateInputValue, displayStatus, formatBasisPointsPercent, formatDateTime } from "@/lib/format";
+import { closeOpportunityAction, recordSaleAction, recordSpecialSpiffAction, updateOpportunityClosersAction } from "@/app/actions";
+import { getFormOptions, getOpportunity, getSpecialSpiffEntryOptions } from "@/lib/data";
+import { currentDateInputValue, displayStatus, formatBasisPointsPercent, formatDateTime, formatDisplayDate, formatMoney } from "@/lib/format";
 import { canManage } from "@/lib/roles";
 import { displayClientSession } from "@/lib/session-options";
 import { getCurrentUser } from "@/lib/session";
+import { findStaffForUser } from "@/lib/current-staff";
 import { getOpportunityNextAction } from "@/lib/opportunity-next-action";
 import { NextActionCard } from "./next-action-card";
 
@@ -15,17 +16,22 @@ type PageProps = {
 
 export default async function OpportunityDetailPage({ params, searchParams }: PageProps) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const [opportunity, options, user] = await Promise.all([getOpportunity(id), getFormOptions(), getCurrentUser()]);
+  const [opportunity, options, specialSpiffOptions, user] = await Promise.all([getOpportunity(id), getFormOptions(), getSpecialSpiffEntryOptions(), getCurrentUser()]);
   if (!opportunity) {
     notFound();
   }
+  const currentStaff = await findStaffForUser(user);
 
   const error = scalar(query.error);
   const taskCompleted = scalar(query.task) === "completed";
   const saleRecorded = scalar(query.sale) === "1";
+  const spiffRecorded = scalar(query.spiff) === "1";
   const closed = scalar(query.closed) === "1";
   const updated = scalar(query.updated) === "1";
   const canClose = canManage(user?.role ?? "");
+  const canAssignSpecialSpiff = canManage(user?.role ?? "");
+  const usedSpecialSpiffIds = new Set(opportunity.client.specialSpiffAwards.map((award) => award.specialSpiffId));
+  const availableSpecialSpiffs = specialSpiffOptions.specialSpiffs.filter((spiff) => !usedSpecialSpiffIds.has(spiff.id));
   const nextAction = getOpportunityNextAction({
     interestLevel: opportunity.interestLevel,
     firstVisitDate: opportunity.client.firstVisitDate,
@@ -34,7 +40,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
   });
   const smsMessage = buildPersonalSms({
     clientFirstName: opportunity.client.firstName,
-    firstVisitDate: dateInputValue(opportunity.client.firstVisitDate),
+    firstVisitDate: formatDisplayDate(opportunity.client.firstVisitDate),
     therapistName: opportunity.firstVisitTherapist?.displayName ?? "your therapist",
     primaryIssue: opportunity.client.primaryIssue ?? "primary issue",
     userName: user?.displayName ?? "Thai Sport",
@@ -52,6 +58,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
       {error ? <p className="message border-[var(--orange)]">{error}</p> : null}
       {taskCompleted ? <p className="message border-[var(--teal)]">Task completed. The next action is updated.</p> : null}
       {saleRecorded ? <p className="message border-[var(--teal)]">Membership sale recorded and sent for approval.</p> : null}
+      {spiffRecorded ? <p className="message border-[var(--teal)]">Special Spiff recorded and sent for approval.</p> : null}
       {closed ? <p className="message border-[var(--teal)]">Opportunity closed.</p> : null}
       {updated ? <p className="message border-[var(--teal)]">Closer assignments updated.</p> : null}
 
@@ -59,7 +66,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
         <div className="card p-4">
           <h2 className="section-title mb-3">Client Information</h2>
           <dl className="space-y-2 text-sm">
-            <Row label="First visit" value={dateInputValue(opportunity.client.firstVisitDate)} />
+            <Row label="First visit" value={formatDisplayDate(opportunity.client.firstVisitDate)} />
             <Row label="Session" value={displayClientSession(opportunity.client.sessionType, opportunity.client.sessionOther)} />
             <Row label="Client type" value={opportunity.client.clientType ?? "-"} />
             <Row label="Primary issue" value={opportunity.client.primaryIssue ?? "-"} />
@@ -80,7 +87,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
             <NextActionCard
               opportunityId={opportunity.id}
               actionLabel={nextAction.label}
-              dueDate={nextAction.dueDate ? dateInputValue(nextAction.dueDate) : null}
+              dueDate={nextAction.dueDate ? formatDisplayDate(nextAction.dueDate) : null}
               isLate={nextAction.isLate}
               canComplete={nextAction.canComplete}
               defaultMessage={smsMessage}
@@ -92,22 +99,9 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
               <h2 className="section-title mb-3">Opportunity Assignment</h2>
               <form action={updateOpportunityClosersAction} className="grid gap-3 md:grid-cols-2">
                 <input type="hidden" name="opportunityId" value={opportunity.id} />
-                <label className="grid gap-1">
-                  <span className="text-sm font-semibold">Primary closer</span>
-                  <select className="field" name="proposedPrimaryCloserId" defaultValue={opportunity.proposedPrimaryCloserId} required>
-                    {options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
-                  </select>
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-sm font-semibold">Secondary closer</span>
-                  <select className="field" name="proposedSupportCloserId" defaultValue={opportunity.proposedSupportCloserId ?? ""}>
-                    <option value="">None</option>
-                    {options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
-                  </select>
-                </label>
-                <div className="md:col-span-2">
-                  <button className="button-primary" type="submit">Save assignment</button>
-                </div>
+                <label className="grid gap-1"><span className="text-sm font-semibold">Primary closer</span><select className="field" name="proposedPrimaryCloserId" defaultValue={opportunity.proposedPrimaryCloserId} required>{options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label>
+                <label className="grid gap-1"><span className="text-sm font-semibold">Secondary closer</span><select className="field" name="proposedSupportCloserId" defaultValue={opportunity.proposedSupportCloserId ?? ""}><option value="">None</option>{options.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label>
+                <div className="md:col-span-2"><button className="button-primary" type="submit">Save assignment</button></div>
               </form>
             </div>
           ) : null}
@@ -116,7 +110,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
             <h2 className="section-title mb-3">Membership Sale</h2>
             {opportunity.sale ? (
               <div className="grid gap-3 md:grid-cols-2">
-                <Row label="Sale date" value={dateInputValue(opportunity.sale.membershipSaleDate)} />
+                <Row label="Sale date" value={formatDisplayDate(opportunity.sale.membershipSaleDate)} />
                 <Row label="Membership type" value={opportunity.sale.membershipType.name} />
                 <Row label="Primary closer" value={opportunity.sale.finalPrimaryCloser.displayName} />
                 <Row label="Support closer" value={opportunity.sale.finalSupportCloser?.displayName ?? "-"} />
@@ -128,7 +122,7 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
                   <div className="flex flex-wrap gap-2">
                     {opportunity.sale.credits.map((credit) => (
                       <span key={credit.id} className="badge badge-teal">
-                        {credit.staff.displayName}: {formatBasisPointsPercent(credit.creditBasisPoints)}
+                        {credit.staff.displayName}: {formatBasisPointsPercent(credit.payoutBasisPoints)}
                       </span>
                     ))}
                   </div>
@@ -171,6 +165,91 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
             )}
           </div>
         </div>
+      </section>
+
+      <section className="card p-4">
+        <div className="mb-3">
+          <h2 className="section-title">Special Spiffs</h2>
+          <p className="text-sm text-[var(--text-muted)]">Each Special Spiff can be recorded once for this customer and requires administrator approval.</p>
+        </div>
+        {opportunity.client.specialSpiffAwards.length > 0 ? (
+          <div className="table-wrap mb-4">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Spiff</th>
+                  <th>Function</th>
+                  <th>Date</th>
+                  <th>Staff</th>
+                  <th>Location</th>
+                  <th>Amount</th>
+                  <th>Approval</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opportunity.client.specialSpiffAwards.map((award) => (
+                  <tr key={award.id}>
+                    <td className="font-semibold">{award.spiffNameSnapshot}</td>
+                    <td>{award.functionDescriptionSnapshot}</td>
+                    <td>{formatDisplayDate(award.activityDate)}</td>
+                    <td>{award.staff.displayName}</td>
+                    <td>{award.location.code}</td>
+                    <td>{formatMoney(award.amountCentsSnapshot)}</td>
+                    <td>{displayStatus(award.approvalStatus)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {availableSpecialSpiffs.length > 0 && (canAssignSpecialSpiff || currentStaff) ? (
+          <form action={recordSpecialSpiffAction} className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+            <input type="hidden" name="opportunityId" value={opportunity.id} />
+            <label className="grid gap-1 lg:col-span-2">
+              <span className="text-sm font-semibold">Active Special Spiff</span>
+              <select className="field" name="specialSpiffId" required>
+                <option value="">Select a Special Spiff</option>
+                {availableSpecialSpiffs.map((spiff) => (
+                  <option key={spiff.id} value={spiff.id}>{spiff.name} — {formatMoney(spiff.amountCents)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold">Activity date</span>
+              <input className="field" name="activityDate" type="date" defaultValue={currentDateInputValue(new Date())} required />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold">Location</span>
+              <select className="field" name="locationId" defaultValue={opportunity.locationId} required>
+                {specialSpiffOptions.locations.map((location) => <option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}
+              </select>
+            </label>
+            {canAssignSpecialSpiff ? (
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold">Commissionable staff</span>
+                <select className="field" name="staffId" defaultValue={currentStaff?.id ?? opportunity.proposedPrimaryCloserId} required>
+                  {specialSpiffOptions.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+                </select>
+              </label>
+            ) : (
+              <div>
+                <p className="text-sm font-semibold">Commissionable staff</p>
+                <p>{currentStaff?.displayName}</p>
+              </div>
+            )}
+            <label className="grid gap-1 lg:col-span-4">
+              <span className="text-sm font-semibold">Notes (optional)</span>
+              <input className="field" name="notes" />
+            </label>
+            <div className="flex items-end">
+              <button className="button-accent" type="submit">Record Special Spiff</button>
+            </div>
+          </form>
+        ) : availableSpecialSpiffs.length === 0 ? (
+          <p className="empty-state">No additional active Special Spiffs are available for this customer.</p>
+        ) : (
+          <p className="empty-state">Your user access must match a commissionable staff record before you can record a Special Spiff.</p>
+        )}
       </section>
 
       {canClose && !opportunity.sale ? (

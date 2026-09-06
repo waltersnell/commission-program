@@ -1,8 +1,13 @@
 import {
+  createMembershipTypeAction,
+  createSpecialSpiffAction,
   createStaffAction,
   createUserAction,
   deactivateUserAction,
+  deleteSpecialSpiffAction,
   updateCommissionSettingAction,
+  updateMembershipTypeAction,
+  updateSpecialSpiffAction,
   updateStaffAction,
   updateUserAction,
 } from "@/app/actions";
@@ -15,19 +20,13 @@ import { getCurrentRole } from "@/lib/session";
 import { AdminPanel } from "./admin-panel";
 import { CrmStepsEditor } from "./crm-steps-editor";
 import { ClientRecordEditor } from "./client-record-editor";
+import { AdminNav, type AdminSectionKey } from "./admin-nav";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const adminSections = [
-  { key: "users", label: "Users", description: "Login access and user accounts" },
-  { key: "commission", label: "Commission Settings", description: "Staff and commission rules" },
-  { key: "other", label: "Other Settings", description: "CRM, locations, and memberships" },
-  { key: "clients", label: "Client Search", description: "Client records and audit history" },
-] as const;
-
-type AdminSectionKey = (typeof adminSections)[number]["key"];
+const adminSectionKeys: AdminSectionKey[] = ["users", "commission", "other", "clients"];
 
 export default async function AdminPage({ searchParams }: PageProps) {
   const [role, params] = await Promise.all([getCurrentRole(), searchParams]);
@@ -55,26 +54,11 @@ export default async function AdminPage({ searchParams }: PageProps) {
       {clientUpdated ? <p className="message border-[var(--teal)]">Client record updated.</p> : null}
       {clientDeleted ? <p className="message border-[var(--teal)]">Client record deleted.</p> : null}
 
-      <nav className="admin-subnav" aria-label="Administration sections">
-        {adminSections.map((section) => {
-          const isActive = activeSection === section.key;
-          return (
-            <Link
-              key={section.key}
-              href={`/admin?section=${section.key}`}
-              className={`admin-subnav-link${isActive ? " admin-subnav-link-active" : ""}`}
-              aria-current={isActive ? "page" : undefined}
-            >
-              <span>{section.label}</span>
-              <small>{section.description}</small>
-            </Link>
-          );
-        })}
-      </nav>
+      <AdminNav active={activeSection} />
 
       {activeSection === "users" ? <div className="admin-section-stack">
       <AdminPanel title="Create User Access" collapsible={false}>
-        <form action={createUserAction} className="grid gap-3 md:grid-cols-6">
+        <form action={createUserAction} className="grid gap-3 md:grid-cols-7">
           <input className="field md:col-span-2" name="displayName" placeholder="Name" required disabled={!isAdmin} />
           <select className="field" name="role" required disabled={!isAdmin}>
             {roles.map((userRole) => (
@@ -84,7 +68,11 @@ export default async function AdminPage({ searchParams }: PageProps) {
           <input className="field" name="phone" placeholder="Phone" required disabled={!isAdmin} />
           <input className="field" name="email" type="email" placeholder="Email / user name" required disabled={!isAdmin} />
           <input className="field" name="password" type="password" placeholder="Password" required disabled={!isAdmin} />
-          <button className="button-primary md:col-span-6" type="submit" disabled={!isAdmin}>Create user access</button>
+          <select className="field" name="staffId" defaultValue="" disabled={!isAdmin}>
+            <option value="">No commission profile</option>
+            {data.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+          </select>
+          <button className="button-primary md:col-span-7" type="submit" disabled={!isAdmin}>Create user access</button>
         </form>
       </AdminPanel>
 
@@ -92,7 +80,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
         <div className="space-y-3">
           {data.users.map((user) => (
             <div key={user.id} className="rounded-[8px] border border-[var(--border)] p-3">
-              <form action={updateUserAction} className="grid gap-3 md:grid-cols-7">
+              <form action={updateUserAction} className="grid gap-3 md:grid-cols-8">
                 <input type="hidden" name="userId" value={user.id} />
                 <input className="field md:col-span-2" name="displayName" defaultValue={user.displayName} required disabled={!isAdmin} />
                 <select className="field" name="role" defaultValue={user.role} disabled={!isAdmin}>
@@ -107,7 +95,11 @@ export default async function AdminPage({ searchParams }: PageProps) {
                   <option value="true">Active</option>
                   <option value="false">Inactive</option>
                 </select>
-                <div className="flex flex-wrap gap-2 md:col-span-7">
+                <select className="field" name="staffId" defaultValue={user.staffId ?? ""} disabled={!isAdmin}>
+                  <option value="">No commission profile</option>
+                  {data.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
+                </select>
+                <div className="flex flex-wrap gap-2 md:col-span-8">
                   <button className="button-primary" type="submit" disabled={!isAdmin}>Save user</button>
                   <button form={`deactivate-${user.id}`} className="button-danger" type="submit" disabled={!isAdmin || !user.active}>Delete access</button>
                   <span className={user.active ? "badge badge-teal" : "badge badge-gray"}>{user.active ? "Can login" : "Login disabled"}</span>
@@ -175,6 +167,37 @@ export default async function AdminPage({ searchParams }: PageProps) {
           ))}
         </div>
       </AdminPanel>
+
+      <AdminPanel title="Special Spiffs" collapsible={false}>
+        <div className="space-y-4">
+          <form action={createSpecialSpiffAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-5">
+            <input className="field" name="name" placeholder="Spiff name" required disabled={!isAdmin} />
+            <input className="field md:col-span-2" name="functionDescription" placeholder="Function" required disabled={!isAdmin} />
+            <input className="field" name="amount" inputMode="decimal" placeholder="Amount, for example 20.00" required disabled={!isAdmin} />
+            <label className="grid gap-1"><span className="text-xs font-semibold text-[var(--text-muted)]">End date (optional)</span><input className="field" name="endDate" type="date" disabled={!isAdmin} /></label>
+            <button className="button-primary md:col-span-5" type="submit" disabled={!isAdmin}>Add Special Spiff</button>
+          </form>
+          {data.specialSpiffs.map((spiff) => (
+            <div key={spiff.id} className="rounded-[8px] border border-[var(--border)] p-3">
+              <form action={updateSpecialSpiffAction} className="grid gap-3 md:grid-cols-6">
+                <input type="hidden" name="specialSpiffId" value={spiff.id} />
+                <input className="field" name="name" defaultValue={spiff.name} required disabled={!isAdmin} />
+                <input className="field md:col-span-2" name="functionDescription" defaultValue={spiff.functionDescription} required disabled={!isAdmin} />
+                <input className="field" name="amount" inputMode="decimal" defaultValue={centsToDollarInput(spiff.amountCents)} required disabled={!isAdmin} />
+                <input className="field" name="endDate" type="date" defaultValue={spiff.endDate ? dateInputValue(spiff.endDate) : ""} disabled={!isAdmin} />
+                <select className="field" name="active" defaultValue={spiff.active ? "true" : "false"} disabled={!isAdmin}><option value="true">Active</option><option value="false">Inactive</option></select>
+                <div className="flex flex-wrap items-center gap-2 md:col-span-6">
+                  <button className="button-primary" type="submit" disabled={!isAdmin}>Save Special Spiff</button>
+                  <button form={`delete-spiff-${spiff.id}`} className="button-danger" type="submit" disabled={!isAdmin}>{spiff._count.awards > 0 ? "Archive" : "Delete"}</button>
+                  <span className="badge badge-gray">{spiff._count.awards} recorded</span>
+                </div>
+              </form>
+              <form id={`delete-spiff-${spiff.id}`} action={deleteSpecialSpiffAction}><input type="hidden" name="specialSpiffId" value={spiff.id} /></form>
+            </div>
+          ))}
+          {data.specialSpiffs.length === 0 ? <p className="empty-state">No Special Spiffs have been created.</p> : null}
+        </div>
+      </AdminPanel>
       </div> : null}
 
       {activeSection === "other" ? <div className="admin-section-stack">
@@ -187,7 +210,21 @@ export default async function AdminPage({ searchParams }: PageProps) {
           <ListRows rows={data.locations.map((location) => [location.code, location.name, location.active ? "Active" : "Inactive"])} />
         </AdminPanel>
         <AdminPanel title="Membership Types" collapsible={false}>
-          <ListRows rows={data.membershipTypes.map((type) => [type.name, type.active ? "Active" : "Inactive", ""])} />
+          <div className="space-y-3">
+            <form action={createMembershipTypeAction} className="flex flex-col gap-2 border-b border-[var(--border)] pb-3 md:flex-row">
+              <input className="field flex-1" name="name" placeholder="Membership type name" required disabled={!isAdmin} />
+              <button className="button-primary" type="submit" disabled={!isAdmin}>Add membership type</button>
+            </form>
+            {data.membershipTypes.map((type) => (
+              <form key={type.id} action={updateMembershipTypeAction} className="grid gap-2 border-b border-[var(--border)] pb-3 md:grid-cols-[1fr_auto_auto]">
+                <input type="hidden" name="membershipTypeId" value={type.id} />
+                <input className="field" name="name" defaultValue={type.name} required disabled={!isAdmin} />
+                <select className="field" name="active" defaultValue={type.active ? "true" : "false"} disabled={!isAdmin}><option value="true">Active</option><option value="false">Inactive</option></select>
+                <button className="button-primary" type="submit" disabled={!isAdmin}>Save</button>
+                {type.commissionKind === "FAMILY_UPGRADE_SPIFF" ? <p className="text-xs font-semibold text-[var(--text-muted)] md:col-span-3">Flat Family Upgrade Spiff; excluded from membership tiers.</p> : null}
+              </form>
+            ))}
+          </div>
         </AdminPanel>
       </section>
       </div> : null}
@@ -299,11 +336,11 @@ function clientLookupHref(
 }
 
 function adminSection(value: string | undefined): AdminSectionKey {
-  return adminSections.some((section) => section.key === value) ? value as AdminSectionKey : "users";
+  return adminSectionKeys.includes(value as AdminSectionKey) ? value as AdminSectionKey : "users";
 }
 
 function settingInputValue(key: string, value: string) {
-  if (["tier1.rateCents", "tier2.rateCents", "tier3.rateCents", "firstVisitBonusCents"].includes(key)) {
+  if (["tier1.rateCents", "tier2.rateCents", "tier3.rateCents", "firstVisitBonusCents", "familyUpgradeSpiffCents"].includes(key)) {
     return centsToDollarInput(value);
   }
   if (["primarySplitBasisPoints", "supportSplitBasisPoints"].includes(key)) {
@@ -313,7 +350,7 @@ function settingInputValue(key: string, value: string) {
 }
 
 function settingHelp(key: string) {
-  if (["tier1.rateCents", "tier2.rateCents", "tier3.rateCents", "firstVisitBonusCents"].includes(key)) {
+  if (["tier1.rateCents", "tier2.rateCents", "tier3.rateCents", "firstVisitBonusCents", "familyUpgradeSpiffCents"].includes(key)) {
     return "Dollar amount, for example 25.00";
   }
   if (["primarySplitBasisPoints", "supportSplitBasisPoints"].includes(key)) {

@@ -9,7 +9,8 @@ import {
   saleCloserAssignmentsChanged,
   settingsFromRows,
 } from "@/lib/commission";
-import { getCommissionSummary, saleMonthWhere } from "@/lib/data";
+import { getCommissionSummary, saleMonthWhere, specialSpiffMonthWhere } from "@/lib/data";
+import { findStaffForUser } from "@/lib/current-staff";
 import { getPrisma } from "@/lib/db";
 import {
   dollarInputToCents,
@@ -40,16 +41,24 @@ import {
   ensureRoleCanFinalize,
   ensureRoleCanReopen,
   loginSchema,
+  membershipTypeCreateSchema,
+  membershipTypeEditSchema,
   nextActionSchema,
   opportunityCloserSchema,
   passwordResetSchema,
   saleEntrySchema,
+  specialSpiffApprovalSchema,
+  specialSpiffAwardSchema,
+  specialSpiffCreateSchema,
+  specialSpiffDeleteSchema,
+  specialSpiffEditSchema,
   staffSchema,
   userCreateSchema,
   userDeactivateSchema,
   userEditSchema,
 } from "@/lib/validation";
 import { getNextActionAfterCompletion } from "@/lib/opportunity-next-action";
+import { isSpecialSpiffAvailableForDate } from "@/lib/special-spiffs";
 import {
   initialNewClientFormState,
   newClientValuesFromFormData,
@@ -445,6 +454,12 @@ export async function recordSaleAction(formData: FormData) {
   }
 
   const settings = settingsFromRows(await prisma.commissionSetting.findMany());
+  const membershipType = await prisma.membershipType.findFirst({
+    where: { id: data.membershipTypeId, active: true },
+  });
+  if (!membershipType) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Select an active membership type.")}`);
+  }
   const firstVisit = isFirstVisitSale(opportunity.client.firstVisitDate, saleDate);
   const supportId = data.finalSupportCloserId || null;
 
@@ -468,6 +483,9 @@ export async function recordSaleAction(formData: FormData) {
         primaryStaffId: data.finalPrimaryCloserId,
         supportStaffId: supportId,
         isFirstVisitSale: firstVisit,
+        fixedCommissionCents: membershipType.commissionKind === "FAMILY_UPGRADE_SPIFF"
+          ? settings.familyUpgradeSpiffCents
+          : undefined,
         settings,
       }),
     });
@@ -515,6 +533,101 @@ export async function approveSplitAction(formData: FormData) {
   });
   revalidateCommissionData();
   redirect("/month-end");
+}
+
+export async function approveSpecialSpiffAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  if (!canAdmin(user.role)) {
+    redirect(`/month-end?error=${encodeURIComponent("Only administrators can approve Special Spiffs.")}`);
+  }
+  const parsed = specialSpiffApprovalSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/month-end?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the Special Spiff approval.")}`);
+  }
+  const award = await getPrisma().specialSpiffAward.update({
+    where: { id: parsed.data.specialSpiffAwardId },
+    data: { approvalStatus: parsed.data.approval },
+  });
+  await auditAdminChange(
+    user.role,
+    parsed.data.approval === "APPROVED" ? "SPECIAL_SPIFF_APPROVED" : "SPECIAL_SPIFF_REJECTED",
+    "SpecialSpiffAward",
+    award.id,
+    award.spiffNameSnapshot,
+  );
+  revalidatePath("/");
+  revalidatePath("/commissions");
+  revalidatePath("/month-end");
+  redirect("/month-end");
+}
+
+export async function recordSpecialSpiffAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const parsed = specialSpiffAwardSchema.safeParse(Object.fromEntries(formData));
+  const opportunityId = String(formData.get("opportunityId") ?? "");
+  if (!parsed.success) {
+    redirect(`/opportunities/${opportunityId}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the Special Spiff form.")}`);
+  }
+  const data = parsed.data;
+  const prisma = getPrisma();
+  const [opportunity, specialSpiff, location, currentStaff] = await Promise.all([
+    prisma.membershipOpportunity.findUnique({ where: { id: data.opportunityId }, include: { client: true } }),
+    prisma.specialSpiff.findUnique({ where: { id: data.specialSpiffId } }),
+    prisma.location.findFirst({ where: { id: data.locationId, active: true } }),
+    findStaffForUser(user),
+  ]);
+  if (!opportunity || !specialSpiff || !location) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("The client, Special Spiff, or location is unavailable.")}`);
+  }
+  const activityDate = toLocalDate(data.activityDate);
+  if (!isSpecialSpiffAvailableForDate(specialSpiff, activityDate)) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("This Special Spiff is no longer active for the selected date.")}`);
+  }
+  const period = await prisma.commissionPeriod.findUnique({ where: { month: monthKey(activityDate) } });
+  if (!assertCanEditPeriod(user.role, period?.status)) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("This commission month is finalized.")}`);
+  }
+  const staffId = canManage(user.role) ? data.staffId || currentStaff?.id : currentStaff?.id;
+  if (!staffId) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("Your user access is not linked to commissionable staff.")}`);
+  }
+  if (
+    !canManage(user.role) &&
+    opportunity.proposedPrimaryCloserId !== staffId &&
+    opportunity.proposedSupportCloserId !== staffId
+  ) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("You can only record a Special Spiff for a customer assigned to you.")}`);
+  }
+  const staff = await prisma.staff.findFirst({ where: { id: staffId, active: true } });
+  if (!staff) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("Select an active commissionable staff member.")}`);
+  }
+  const existing = await prisma.specialSpiffAward.findUnique({
+    where: { specialSpiffId_clientId: { specialSpiffId: specialSpiff.id, clientId: opportunity.clientId } },
+  });
+  if (existing) {
+    redirect(`/opportunities/${data.opportunityId}?error=${encodeURIComponent("This Special Spiff has already been recorded for this customer.")}`);
+  }
+  const award = await prisma.specialSpiffAward.create({
+    data: {
+      specialSpiffId: specialSpiff.id,
+      clientId: opportunity.clientId,
+      staffId: staff.id,
+      locationId: location.id,
+      activityDate,
+      approvalStatus: "PENDING",
+      spiffNameSnapshot: specialSpiff.name,
+      functionDescriptionSnapshot: specialSpiff.functionDescription,
+      amountCentsSnapshot: specialSpiff.amountCents,
+      notes: data.notes || null,
+    },
+  });
+  await auditAdminChange(user.role, "SPECIAL_SPIFF_RECORDED", "SpecialSpiffAward", award.id, `${specialSpiff.name}: ${staff.displayName}`);
+  revalidatePath("/");
+  revalidatePath("/commissions");
+  revalidatePath("/month-end");
+  revalidatePath(`/opportunities/${data.opportunityId}`);
+  redirect(`/opportunities/${data.opportunityId}?spiff=1`);
 }
 
 export async function closeOpportunityAction(formData: FormData) {
@@ -565,8 +678,11 @@ export async function finalizeMonthAction(formData: FormData) {
 
   const prisma = getPrisma();
   const pending = await prisma.membershipSale.count({ where: { ...saleMonthWhere(month), approvalStatus: "PENDING" } });
-  if (pending > 0) {
-    redirect(`/month-end?month=${month}&error=${encodeURIComponent("Approve or reject pending membership sales before finalizing.")}`);
+  const pendingSpecialSpiffs = await prisma.specialSpiffAward.count({
+    where: { ...specialSpiffMonthWhere(month), approvalStatus: "PENDING" },
+  });
+  if (pending > 0 || pendingSpecialSpiffs > 0) {
+    redirect(`/month-end?month=${month}&error=${encodeURIComponent("Approve or reject pending membership sales and Special Spiffs before finalizing.")}`);
   }
 
   const summary = await getCommissionSummary(month);
@@ -587,6 +703,8 @@ export async function finalizeMonthAction(formData: FormData) {
         firstVisitCredits: result.firstVisitCreditBasisPoints / 10000,
         baseCommissionCents: result.baseCommissionCents,
         firstVisitBonusCents: result.firstVisitBonusCents,
+        membershipSpiffCents: result.membershipSpiffCents,
+        specialSpiffCents: result.specialSpiffCents,
         adjustmentsCents: result.adjustmentsCents,
         finalCommissionCents: result.finalCommissionCents,
       })),
@@ -678,6 +796,134 @@ export async function updateStaffAction(formData: FormData) {
   await auditAdminChange(role, "STAFF_EDITED", "Staff", staff.id, staff.displayName);
   revalidatePath("/admin");
   redirect("/admin?section=commission&staff=updated");
+}
+
+export async function createMembershipTypeAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  requireAdmin(user.role);
+  const parsed = membershipTypeCreateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the membership type.")}`);
+  }
+  const existing = await getPrisma().membershipType.findUnique({ where: { name: parsed.data.name } });
+  if (existing) {
+    redirect(`/admin?error=${encodeURIComponent("A membership type with this name already exists.")}`);
+  }
+  const membershipType = await getPrisma().membershipType.create({
+    data: { name: parsed.data.name, active: true, commissionKind: "STANDARD" },
+  });
+  await auditAdminChange(user.role, "MEMBERSHIP_TYPE_CREATED", "MembershipType", membershipType.id, membershipType.name);
+  revalidatePath("/admin");
+  redirect("/admin?membershipType=created");
+}
+
+export async function updateMembershipTypeAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  requireAdmin(user.role);
+  const parsed = membershipTypeEditSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the membership type.")}`);
+  }
+  const duplicate = await getPrisma().membershipType.findFirst({
+    where: { name: parsed.data.name, NOT: { id: parsed.data.membershipTypeId } },
+  });
+  if (duplicate) {
+    redirect(`/admin?error=${encodeURIComponent("A different membership type already uses this name.")}`);
+  }
+  const membershipType = await getPrisma().membershipType.update({
+    where: { id: parsed.data.membershipTypeId },
+    data: { name: parsed.data.name, active: parsed.data.active === "true" },
+  });
+  await auditAdminChange(user.role, "MEMBERSHIP_TYPE_EDITED", "MembershipType", membershipType.id, membershipType.name);
+  revalidatePath("/admin");
+  revalidatePath("/opportunities");
+  redirect("/admin?membershipType=updated");
+}
+
+export async function createSpecialSpiffAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  requireAdmin(user.role);
+  const parsed = specialSpiffCreateSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the Special Spiff.")}`);
+  }
+  const amountCents = dollarInputToCents(parsed.data.amount);
+  if (amountCents === null || amountCents <= 0) {
+    redirect(`/admin?error=${encodeURIComponent("Enter a Special Spiff amount greater than zero.")}`);
+  }
+  const existing = await getPrisma().specialSpiff.findUnique({ where: { name: parsed.data.name } });
+  if (existing) {
+    redirect(`/admin?error=${encodeURIComponent("A Special Spiff with this name already exists.")}`);
+  }
+  const specialSpiff = await getPrisma().specialSpiff.create({
+    data: {
+      name: parsed.data.name,
+      functionDescription: parsed.data.functionDescription,
+      amountCents,
+      endDate: parsed.data.endDate ? toLocalDate(parsed.data.endDate) : null,
+      active: true,
+    },
+  });
+  await auditAdminChange(user.role, "SPECIAL_SPIFF_CREATED", "SpecialSpiff", specialSpiff.id, specialSpiff.name);
+  revalidatePath("/admin");
+  redirect("/admin?specialSpiff=created");
+}
+
+export async function updateSpecialSpiffAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  requireAdmin(user.role);
+  const parsed = specialSpiffEditSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the Special Spiff.")}`);
+  }
+  const amountCents = dollarInputToCents(parsed.data.amount);
+  if (amountCents === null || amountCents <= 0) {
+    redirect(`/admin?error=${encodeURIComponent("Enter a Special Spiff amount greater than zero.")}`);
+  }
+  const duplicate = await getPrisma().specialSpiff.findFirst({
+    where: { name: parsed.data.name, NOT: { id: parsed.data.specialSpiffId } },
+  });
+  if (duplicate) {
+    redirect(`/admin?error=${encodeURIComponent("A different Special Spiff already uses this name.")}`);
+  }
+  const specialSpiff = await getPrisma().specialSpiff.update({
+    where: { id: parsed.data.specialSpiffId },
+    data: {
+      name: parsed.data.name,
+      functionDescription: parsed.data.functionDescription,
+      amountCents,
+      endDate: parsed.data.endDate ? toLocalDate(parsed.data.endDate) : null,
+      active: parsed.data.active === "true",
+    },
+  });
+  await auditAdminChange(user.role, "SPECIAL_SPIFF_EDITED", "SpecialSpiff", specialSpiff.id, specialSpiff.name);
+  revalidatePath("/admin");
+  redirect("/admin?specialSpiff=updated");
+}
+
+export async function deleteSpecialSpiffAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  requireAdmin(user.role);
+  const parsed = specialSpiffDeleteSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("Special Spiff was not found.")}`);
+  }
+  const prisma = getPrisma();
+  const specialSpiff = await prisma.specialSpiff.findUnique({
+    where: { id: parsed.data.specialSpiffId },
+    include: { _count: { select: { awards: true } } },
+  });
+  if (!specialSpiff) {
+    redirect(`/admin?error=${encodeURIComponent("Special Spiff was not found.")}`);
+  }
+  if (specialSpiff._count.awards > 0) {
+    await prisma.specialSpiff.update({ where: { id: specialSpiff.id }, data: { active: false } });
+  } else {
+    await prisma.specialSpiff.delete({ where: { id: specialSpiff.id } });
+  }
+  await auditAdminChange(user.role, "SPECIAL_SPIFF_DELETED", "SpecialSpiff", specialSpiff.id, specialSpiff.name);
+  revalidatePath("/admin");
+  redirect("/admin?specialSpiff=deleted");
 }
 
 export async function updateCommissionSettingAction(formData: FormData) {
@@ -953,6 +1199,9 @@ export async function createUserAction(formData: FormData) {
   if (existing) {
     redirect(`/admin?section=users&error=${encodeURIComponent("A user with that email already exists.")}`);
   }
+  if (data.staffId && await getPrisma().user.findFirst({ where: { staffId: data.staffId } })) {
+    redirect(`/admin?error=${encodeURIComponent("That commissionable staff member is already linked to another user.")}`);
+  }
   const user = await getPrisma().user.create({
     data: {
       username: email,
@@ -963,6 +1212,7 @@ export async function createUserAction(formData: FormData) {
       email,
       passwordHash: hashPassword(data.password),
       active: true,
+      staffId: data.staffId || null,
     },
   });
   await auditAdminChange(role, "USER_CREATED", "User", user.id, user.email ?? user.username);
@@ -987,6 +1237,9 @@ export async function updateUserAction(formData: FormData) {
   if (existing) {
     redirect(`/admin?section=users&error=${encodeURIComponent("A different user already has that email.")}`);
   }
+  if (data.staffId && await getPrisma().user.findFirst({ where: { staffId: data.staffId, NOT: { id: data.userId } } })) {
+    redirect(`/admin?error=${encodeURIComponent("That commissionable staff member is already linked to another user.")}`);
+  }
   const user = await getPrisma().user.update({
     where: { id: data.userId },
     data: {
@@ -997,6 +1250,7 @@ export async function updateUserAction(formData: FormData) {
       phoneDisplay: phone.display,
       email,
       active: data.active === "true",
+      staffId: data.staffId || null,
       ...(data.password ? { passwordHash: hashPassword(data.password) } : {}),
     },
   });
@@ -1029,7 +1283,7 @@ function requireAdmin(role: string) {
 }
 
 function normalizeSettingValue(key: string, value: string) {
-  if (["tier1.rateCents", "tier2.rateCents", "tier3.rateCents", "firstVisitBonusCents"].includes(key)) {
+  if (["tier1.rateCents", "tier2.rateCents", "tier3.rateCents", "firstVisitBonusCents", "familyUpgradeSpiffCents"].includes(key)) {
     const cents = dollarInputToCents(value);
     return cents === null ? null : String(cents);
   }

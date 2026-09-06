@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { approveSplitAction, finalizeMonthAction, reopenMonthAction } from "@/app/actions";
+import { approveSpecialSpiffAction, approveSplitAction, finalizeMonthAction, reopenMonthAction } from "@/app/actions";
 import { getMonthEndData } from "@/lib/data";
-import { dateInputValue, formatCreditBasisPoints, formatMoney, monthKey } from "@/lib/format";
+import { formatBasisPointsPercent, formatCreditBasisPoints, formatDisplayDate, formatMoney, monthKey } from "@/lib/format";
 import { canAdmin, canManage } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 
@@ -42,7 +42,7 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
       </form>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <ExceptionCard label="Pending approvals" value={data.pendingSplits.length} />
+        <ExceptionCard label="Pending approvals" value={data.pendingSplits.length + data.pendingSpecialSpiffs.length} />
         <ExceptionCard label="Disputed records" value={data.disputes.length} />
         <ExceptionCard label="Invalid records" value={data.invalids.length} />
       </section>
@@ -89,21 +89,32 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
               <div>
                 <p className="font-semibold">{sale.opportunity.client.firstName} {sale.opportunity.client.lastName}</p>
                 <p className="text-sm text-[var(--text-muted)]">
-                  {sale.finalSupportCloser ? `${sale.finalPrimaryCloser.displayName} 70% / ${sale.finalSupportCloser.displayName} 30%` : `${sale.finalPrimaryCloser.displayName} 100%`}
+                  {sale.credits.map((credit) => `${credit.staff.displayName} ${formatBasisPointsPercent(credit.payoutBasisPoints)}`).join(" / ")}
                 </p>
-                <p className="text-xs font-semibold text-[var(--text-muted)]">Sale date {dateInputValue(sale.membershipSaleDate)}</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)]">Sale date {formatDisplayDate(sale.membershipSaleDate)}</p>
               </div>
-              {canAdmin(role) ? (
-                <div className="flex gap-2">
-                  <button className="button-primary" name="approval" value="APPROVED">Approve</button>
-                  <button className="button-danger" name="approval" value="REJECTED">Reject</button>
-                </div>
-              ) : (
-                <span className="badge badge-gray">Administrator approval required</span>
-              )}
+              {canAdmin(role) ? <div className="flex gap-2"><button className="button-primary" name="approval" value="APPROVED">Approve</button><button className="button-danger" name="approval" value="REJECTED">Reject</button></div> : <span className="badge badge-gray">Administrator approval required</span>}
             </form>
           ))}
           {data.pendingSplits.length === 0 ? <p className="empty-state">No pending sales.</p> : null}
+        </div>
+      </section>
+
+      <section className="card p-4">
+        <h2 className="section-title mb-3">Pending Special Spiffs</h2>
+        <div className="space-y-3">
+          {data.pendingSpecialSpiffs.map((award) => (
+            <form key={award.id} action={approveSpecialSpiffAction} className="flex flex-col gap-2 border-b border-[var(--border)] pb-3 md:flex-row md:items-center md:justify-between">
+              <input type="hidden" name="specialSpiffAwardId" value={award.id} />
+              <div>
+                <p className="font-semibold">{award.spiffNameSnapshot} — {award.client.firstName} {award.client.lastName}</p>
+                <p className="text-sm text-[var(--text-muted)]">{award.staff.displayName} · {award.location.code} · {formatMoney(award.amountCentsSnapshot)}</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)]">Activity date {formatDisplayDate(award.activityDate)}</p>
+              </div>
+              {canAdmin(role) ? <div className="flex gap-2"><button className="button-primary" name="approval" value="APPROVED">Approve</button><button className="button-danger" name="approval" value="REJECTED">Reject</button></div> : <span className="badge badge-gray">Administrator approval required</span>}
+            </form>
+          ))}
+          {data.pendingSpecialSpiffs.length === 0 ? <p className="empty-state">No pending Special Spiffs.</p> : null}
         </div>
       </section>
 
@@ -118,6 +129,8 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
                 <th>First Visit</th>
                 <th>Base</th>
                 <th>Bonus</th>
+                <th>Family Upgrade</th>
+                <th>Special Spiffs</th>
                 <th>Final</th>
               </tr>
             </thead>
@@ -129,6 +142,8 @@ export default async function MonthEndPage({ searchParams }: PageProps) {
                   <td>{formatCreditBasisPoints(result.firstVisitCreditBasisPoints)}</td>
                   <td>{formatMoney(result.baseCommissionCents)}</td>
                   <td>{formatMoney(result.firstVisitBonusCents)}</td>
+                  <td>{formatMoney(result.membershipSpiffCents)}</td>
+                  <td>{formatMoney(result.specialSpiffCents)}</td>
                   <td className="font-semibold">{formatMoney(result.finalCommissionCents)}</td>
                 </tr>
               ))}

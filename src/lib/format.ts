@@ -40,6 +40,11 @@ export function dateInputValue(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+export function formatDisplayDate(date: Date) {
+  const [year, month, day] = dateInputValue(date).split("-");
+  return `${day}/${month}/${year}`;
+}
+
 export function currentDateInputValue(date = new Date()) {
   const { year, month, day } = pacificParts(date);
   return `${year}-${month}-${day}`;
@@ -59,6 +64,11 @@ export function currentMonthKey(date = new Date()) {
   return `${year}-${month}`;
 }
 
+export function formatMonthKey(value: string) {
+  const [year, month] = value.split("-");
+  return `${month}/${year}`;
+}
+
 export function monthLabel(date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: APP_TIME_ZONE,
@@ -68,24 +78,13 @@ export function monthLabel(date = new Date()) {
 }
 
 export function longDateLabel(date = new Date()) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: APP_TIME_ZONE,
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
+  const { year, month, day } = pacificParts(date);
+  return `${day}/${month}/${year}`;
 }
 
 export function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: APP_TIME_ZONE,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(date);
+  const { year, month, day, hour, minute } = pacificParts(date);
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 export function addCalendarDays(date: Date, days: number) {
