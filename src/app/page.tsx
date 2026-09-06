@@ -90,6 +90,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   <th>Tier</th>
                   <th>Base</th>
                   <th>First Visit</th>
+                  <th>Spiffs</th>
                   <th>Total</th>
                 </tr>
               </thead>
@@ -101,6 +102,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     <td>{result.currentTier}</td>
                     <td>{formatMoney(result.baseCommissionCents)}</td>
                     <td>{formatMoney(result.firstVisitBonusCents)}</td>
+                    <td>{formatMoney(result.membershipSpiffCents + result.specialSpiffCents)}</td>
                     <td className="font-semibold">{formatMoney(result.finalCommissionCents)}</td>
                   </tr>
                 ))}

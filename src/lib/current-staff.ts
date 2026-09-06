@@ -2,11 +2,14 @@ import type { Staff, User } from "@prisma/client";
 import { getPrisma } from "./db";
 import { isCloserRole } from "./roles";
 
-export async function findStaffForUser(user: Pick<User, "displayName" | "username" | "email"> | null) {
+export async function findStaffForUser(user: Pick<User, "displayName" | "username" | "email" | "staffId"> | null) {
   if (!user) {
     return null;
   }
 
+  if (user.staffId) {
+    return getPrisma().staff.findFirst({ where: { id: user.staffId, active: true } });
+  }
   const staff = await getPrisma().staff.findMany({ where: { active: true } });
   return matchStaffForUser(user, staff);
 }
@@ -41,5 +44,5 @@ export function staffMatchesUser(staff: Pick<Staff, "displayName" | "firstName">
 }
 
 function normalizeName(value: string) {
-  return value.trim().toLowerCase();
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }

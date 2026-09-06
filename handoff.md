@@ -1,10 +1,19 @@
 # Handoff
 
-Last updated: 2026-09-01
+Last updated: 2026-09-06
 
 ## Current State
 
 The app is a local Next.js/TypeScript/Prisma SQLite commission tracker for Thai Sport Bodyworks. It has login protection, local user management, administrator-managed commissionable staff, first-time client intake, opportunities, membership sales, commission summaries, and month-end flows.
+
+Latest additional local feature set: commission details, Family Upgrade, Special Spiffs, and administrator Run Payroll reporting.
+
+- Commission Progress links each staff member to transaction-level membership and Special Spiff detail while preserving the approved-only Commission Progress rule from current `main`.
+- Family Upgrade is a flat configurable commission type that adds no tier credit or first-visit bonus. Special Spiff definitions and awards snapshot their saved amount and follow the existing pending approval workflow.
+- Administration keeps the current URL-persistent submenu architecture and adds `Run Payroll` as a fifth submenu destination at `/admin/payroll`.
+- Run Payroll is administrator-only and read-only. It accepts inclusive From/Until dates, derives historically commissioned staff from transactions, separates approved payable, pending estimated, and rejected/excluded amounts, and provides print and authorized CSV output.
+- Payroll ranges crossing calendar months calculate each month's tier progression independently. No payroll table or payment-state migration was added.
+- The two new Prisma migrations are additive and preserve existing client, user, sale, and credit records.
 
 Latest in-progress flow: Hallmark-guided UI improvements for front desk speed and responsive technical use.
 

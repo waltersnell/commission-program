@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getFormOptions, getOpportunities } from "@/lib/data";
-import { dateInputValue } from "@/lib/format";
+import { dateInputValue, formatDisplayDate } from "@/lib/format";
 import { canAdmin } from "@/lib/roles";
 import { getCurrentUser } from "@/lib/session";
 import { findStaffForUser } from "@/lib/current-staff";
@@ -107,7 +107,7 @@ function OpportunitySection({ title, rows, emptyMessage }: { title: string; rows
                     {opportunity.client.firstName} {opportunity.client.lastName}
                   </Link>
                 </td>
-                <td>{dateInputValue(opportunity.client.firstVisitDate)}</td>
+                <td>{formatDisplayDate(opportunity.client.firstVisitDate)}</td>
                 <td>{opportunity.location.code}</td>
                 <td>{opportunity.proposedPrimaryCloser.displayName}</td>
                 <td>{opportunity.proposedSupportCloser?.displayName ?? "-"}</td>

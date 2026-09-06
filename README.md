@@ -103,6 +103,8 @@ Users can also be created, edited, and deactivated from the Administrator page. 
 - Navigation: managers see the full operating menu plus Month-End, but not Admin. Administrators see Month-End and Admin. The active menu item follows the current route, including nested detail routes.
 - Primary and secondary closer selectors only show active Front Desk, Manager, and Administrator assignments. Existing staff records matched to active privileged users remain selectable during the transition to the role-filtered list.
 - Opportunity detail: client information includes collection notes, and a Next Action panel provides the due date, a large editable SMS copy window, copy button with clipboard fallback, and Task Completed workflow.
+- Commission details and incentives: commissionable staff names open transaction-level reports. Family Upgrade pays a flat configurable amount without tier credits, and administrators can manage and approve customer-specific Special Spiffs.
+- Run Payroll: administrators select an inclusive From/Until date range and receive a review-only report for every commissionable staff member with earnings, including inactive historical staff. Approved payable, pending estimated, and rejected/excluded activity are separated, with printable detail and CSV export. Running the report does not approve, finalize, mark paid, or otherwise change records; tiers still reset by calendar month.
 
 ## Design System
 

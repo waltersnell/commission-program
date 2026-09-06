@@ -26,19 +26,23 @@ export async function GET(_request: Request, { params }: RouteProps) {
       "First-visit credits",
       "Base commission",
       "First-visit bonus",
+      "Family Upgrade Spiffs",
+      "Special Spiffs",
       "Adjustments",
       "Final commission",
       "Approval status",
     ],
     ...period.results.map((result) => [
       result.staff.displayName,
-      period.month,
+      displayMonth(period.month),
       String(result.fullSaleCount),
       result.splitCreditUnits.toString(),
       result.totalCredits.toString(),
       result.firstVisitCredits.toString(),
       cents(result.baseCommissionCents),
       cents(result.firstVisitBonusCents),
+      cents(result.membershipSpiffCents),
+      cents(result.specialSpiffCents),
       cents(result.adjustmentsCents),
       cents(result.finalCommissionCents),
       result.approvalStatus,
@@ -52,6 +56,11 @@ export async function GET(_request: Request, { params }: RouteProps) {
       "content-disposition": `attachment; filename="commission-${month}.csv"`,
     },
   });
+}
+
+function displayMonth(value: string) {
+  const [year, month] = value.split("-");
+  return `${month}/${year}`;
 }
 
 function cents(value: number) {

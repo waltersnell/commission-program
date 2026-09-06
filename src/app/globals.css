@@ -525,8 +525,30 @@ a {
 
 @media (min-width: 64rem) {
   .admin-subnav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+}
+
+.payroll-person > summary::-webkit-details-marker {
+  display: none;
+}
+
+.payroll-detail-table {
+  min-width: 1180px;
+}
+
+@media print {
+  @page { margin: 0.5in; size: landscape; }
+  .app-header, .no-print { display: none !important; }
+  body { background: white; color: black; font-size: 10px; }
+  main { max-width: none !important; padding: 0 !important; }
+  .payroll-report { gap: 1rem; }
+  .payroll-print-heading { display: flex; }
+  .payroll-person, .payroll-person[open] { break-inside: avoid; }
+  .card { box-shadow: none; }
+  .table-wrap { overflow: visible; }
+  .data-table, .payroll-detail-table { min-width: 0; }
+  .data-table th, .data-table td { padding: 0.3rem; }
 }
 
 .desktop-nav {

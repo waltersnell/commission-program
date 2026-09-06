@@ -13,10 +13,12 @@ async function main() {
   await prisma.commissionPeriod.deleteMany();
   await prisma.saleCredit.deleteMany();
   await prisma.membershipSale.deleteMany();
+  await prisma.specialSpiffAward.deleteMany();
   await prisma.followUp.deleteMany();
   await prisma.membershipOpportunity.deleteMany();
   await prisma.client.deleteMany();
   await prisma.crmStepTemplate.deleteMany();
+  await prisma.specialSpiff.deleteMany();
   await prisma.commissionSetting.deleteMany();
   await prisma.membershipType.deleteMany();
   await prisma.location.deleteMany();
@@ -60,17 +62,21 @@ async function main() {
   ]);
 
   const staffRows = await Promise.all(
-    ["Abbott", "Betsy", "Dennis", "Walter"].map((name) =>
+    ["Abbott", "Betsy", "Dennis", "Walter", "Front Desk"].map((name) =>
       prisma.staff.create({
         data: {
           firstName: name,
           displayName: name,
-          role: name === "Walter" ? "MANAGER" : name === "Dennis" ? "THERAPIST" : "SALES",
+          role: name === "Walter" ? "MANAGER" : name === "Dennis" ? "THERAPIST" : name === "Front Desk" ? "FRONT_DESK" : "SALES",
         },
       }),
     ),
   );
   const staff = Object.fromEntries(staffRows.map((person) => [person.displayName, person]));
+  await Promise.all([
+    prisma.user.update({ where: { id: users[1].id }, data: { staffId: staff.Walter.id } }),
+    prisma.user.update({ where: { id: users[2].id }, data: { staffId: staff["Front Desk"].id } }),
+  ]);
 
   const locations = await Promise.all([
     prisma.location.create({ data: { code: "SV", name: "Sorrento Valley" } }),
@@ -80,8 +86,10 @@ async function main() {
   const locationByCode = Object.fromEntries(locations.map((location) => [location.code, location]));
 
   const membershipTypes = await Promise.all(
-    ["Individual Membership", "Family Membership", "Returning Member Reactivation", "Other"].map((name) =>
-      prisma.membershipType.create({ data: { name } }),
+    ["Individual Membership", "Family Membership", "Returning Member Reactivation", "Other", "Family Upgrade Spiff"].map((name) =>
+      prisma.membershipType.create({
+        data: { name, commissionKind: name === "Family Upgrade Spiff" ? "FAMILY_UPGRADE_SPIFF" : "STANDARD" },
+      }),
     ),
   );
 
@@ -92,6 +100,7 @@ async function main() {
     prisma.commissionSetting.create({ data: { key: "tier2.rateCents", label: "Tier 2 rate", value: "3000" } }),
     prisma.commissionSetting.create({ data: { key: "tier3.rateCents", label: "Tier 3 rate", value: "4000" } }),
     prisma.commissionSetting.create({ data: { key: "firstVisitBonusCents", label: "First-visit bonus", value: "1000" } }),
+    prisma.commissionSetting.create({ data: { key: "familyUpgradeSpiffCents", label: "Family Upgrade Spiff amount", value: "1000" } }),
     prisma.commissionSetting.create({ data: { key: "primarySplitBasisPoints", label: "Primary split percentage", value: "7000" } }),
     prisma.commissionSetting.create({ data: { key: "supportSplitBasisPoints", label: "Support split percentage", value: "3000" } }),
   ]);
