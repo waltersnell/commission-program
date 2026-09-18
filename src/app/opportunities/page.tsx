@@ -4,7 +4,6 @@ import { dateInputValue, formatDisplayDate } from "@/lib/format";
 import { canAdmin } from "@/lib/roles";
 import { getCurrentUser } from "@/lib/session";
 import { findStaffForUser } from "@/lib/current-staff";
-import { getOpportunityNextAction } from "@/lib/opportunity-next-action";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -50,7 +49,7 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
       </div>
 
       {isAdmin ? (
-        <form className="card card-soft grid gap-3 p-4 md:grid-cols-4">
+        <form className="card card-soft grid gap-3 p-4 md:grid-cols-5">
           <input className="field" name="search" placeholder="Search name or phone" defaultValue={scalar(params.search) ?? ""} />
           <select className="field" name="locationId" defaultValue={scalar(params.locationId) ?? ""}>
             <option value="">All locations</option>
@@ -60,6 +59,7 @@ export default async function OpportunitiesPage({ searchParams }: PageProps) {
             <option value="">All closers</option>
             {formOptions.staff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}
           </select>
+          <select className="field" name="accountStatus" defaultValue={scalar(params.accountStatus) ?? ""}><option value="">All account statuses</option>{["Hot", "Warm", "Cold", "None"].map((status) => <option key={status}>{status}</option>)}</select>
           <button className="button-primary" type="submit">Filter</button>
         </form>
       ) : null}
@@ -96,6 +96,7 @@ function OpportunitySection({ title, rows, emptyMessage }: { title: string; rows
               <th>Support</th>
               <th>Days Open</th>
               <th>Interest Level</th>
+              <th>Downgrade Date</th>
               <th>Next Action</th>
             </tr>
           </thead>
@@ -113,13 +114,9 @@ function OpportunitySection({ title, rows, emptyMessage }: { title: string; rows
                 <td>{opportunity.proposedSupportCloser?.displayName ?? "-"}</td>
                 <td>{opportunity.daysOpen}</td>
                 <td><InterestBadge level={opportunity.interestLevel} /></td>
+                <td>{opportunity.statusDowngradeAt ? formatDisplayDate(opportunity.statusDowngradeAt) : "-"}</td>
                 <td>
-                  <NextAction
-                    level={opportunity.interestLevel}
-                    firstVisitDate={opportunity.client.firstVisitDate}
-                    followUpStatus={opportunity.followUpStatus}
-                    nextFollowUpDate={opportunity.nextFollowUpDate}
-                  />
+                  {opportunity.nextCrmTask ? <div className="grid gap-1"><span className="font-semibold">{opportunity.nextCrmTask.label}</span><span className="text-[var(--text-muted)]">Due {dateInputValue(opportunity.nextCrmTask.dueDate)}</span></div> : "-"}
                 </td>
               </tr>
             ))}
@@ -147,34 +144,6 @@ function Pagination({ page, pageCount }: { page: number; pageCount: number }) {
 function InterestBadge({ level }: { level: string }) {
   const className = level === "Hot" ? "badge-orange" : level === "Warm" ? "badge-teal" : "badge-gray";
   return <span className={`badge ${className}`}>{level}</span>;
-}
-
-function NextAction({
-  level,
-  firstVisitDate,
-  followUpStatus,
-  nextFollowUpDate,
-}: {
-  level: string;
-  firstVisitDate: Date;
-  followUpStatus?: string | null;
-  nextFollowUpDate?: Date | null;
-}) {
-  const action = getOpportunityNextAction({ interestLevel: level, firstVisitDate, followUpStatus, nextFollowUpDate });
-  if (!action) {
-    return "-";
-  }
-
-  return (
-    <div className="grid gap-1">
-      <span className="font-semibold">{action.label}</span>
-      {action.dueDate ? (
-        <span className={action.isLate ? "font-semibold text-[var(--orange)]" : "text-[var(--text-muted)]"}>
-          Due {dateInputValue(action.dueDate)}
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 function scalar(value: string | string[] | undefined) {

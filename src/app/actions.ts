@@ -9,7 +9,7 @@ import {
   saleCloserAssignmentsChanged,
   settingsFromRows,
 } from "@/lib/commission";
-import { getCommissionSummary, saleMonthWhere, specialSpiffMonthWhere } from "@/lib/data";
+import { getCommissionSummary, nextCrmTask, saleMonthWhere, specialSpiffMonthWhere } from "@/lib/data";
 import { findStaffForUser } from "@/lib/current-staff";
 import { getPrisma } from "@/lib/db";
 import {
@@ -37,6 +37,7 @@ import {
   completeOpportunityTaskSchema,
   commissionSettingSchema,
   crmStepTemplateSchema,
+  crmStatusSettingSchema,
   ensureRoleCanClose,
   ensureRoleCanFinalize,
   ensureRoleCanReopen,
@@ -45,6 +46,7 @@ import {
   membershipTypeEditSchema,
   nextActionSchema,
   opportunityCloserSchema,
+  opportunityStatusChangeSchema,
   passwordResetSchema,
   saleEntrySchema,
   specialSpiffApprovalSchema,
@@ -57,7 +59,7 @@ import {
   userDeactivateSchema,
   userEditSchema,
 } from "@/lib/validation";
-import { getNextActionAfterCompletion } from "@/lib/opportunity-next-action";
+import { allowedManualDowngrades, calculateDowngradeDate, ensureCrmStatusSettings, isCrmStatus } from "@/lib/crm-status";
 import { isSpecialSpiffAvailableForDate } from "@/lib/special-spiffs";
 import {
   initialNewClientFormState,
@@ -151,6 +153,9 @@ export async function createClientAction(_state: NewClientFormState = initialNew
   const membershipSaleDate = soldMembership ? toLocalDate(data.membershipSaleDate!) : null;
   const submittedAt = new Date();
   const prisma = getPrisma();
+  await ensureCrmStatusSettings(prisma);
+  const crmStatusSettings = await prisma.crmStatusSetting.findMany();
+  const crmDurations = new Map(crmStatusSettings.map((setting) => [setting.status, setting.durationDays]));
   const duplicate = await prisma.client.findFirst({
     where: {
       OR: [
@@ -216,6 +221,9 @@ export async function createClientAction(_state: NewClientFormState = initialNew
         locationId: data.locationId,
         firstVisitTherapistId: data.firstVisitTherapistId,
         interestLevel: data.interestLevel,
+        statusSinceAt: submittedAt,
+        statusDowngradeAt: calculateDowngradeDate(data.interestLevel, submittedAt, crmDurations),
+        statusSource: "MANUAL",
         proposedPrimaryCloserId: data.proposedPrimaryCloserId,
         proposedSupportCloserId: data.proposedSupportCloserId || null,
         collectedBy: data.collectedBy,
@@ -374,35 +382,67 @@ export async function completeOpportunityTaskAction(formData: FormData) {
   const prisma = getPrisma();
   const opportunity = await prisma.membershipOpportunity.findUnique({
     where: { id: parsed.data.opportunityId },
-    include: { client: true },
+    include: { followUps: { orderBy: { createdAt: "desc" } } },
   });
   if (!opportunity) {
     redirect(`/opportunities?error=${encodeURIComponent("Opportunity was not found.")}`);
   }
 
-  const next = getNextActionAfterCompletion({
-    interestLevel: opportunity.interestLevel,
-    firstVisitDate: opportunity.client.firstVisitDate,
-    followUpStatus: opportunity.followUpStatus,
-    nextFollowUpDate: opportunity.nextFollowUpDate,
-  });
+  const steps = await prisma.crmStepTemplate.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
+  const currentTask = nextCrmTask(opportunity, steps);
+  if (!currentTask || currentTask.id !== parsed.data.crmStepId) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("This task is no longer the current CRM step. Refresh and try again.")}`);
+  }
+  const requestedStatus = parsed.data.requestedStatus;
+  const currentStatus = opportunity.interestLevel;
+  if (requestedStatus && (!isCrmStatus(currentStatus) || !isCrmStatus(requestedStatus) || !allowedManualDowngrades(currentStatus).includes(requestedStatus))) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Select a valid account-status downgrade.")}`);
+  }
+  if (requestedStatus === "None" && !parsed.data.completionNotes) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Enter completion notes when marking an account None.")}`);
+  }
+  await ensureCrmStatusSettings(prisma);
+  const settings = await prisma.crmStatusSetting.findMany();
+  const durations = new Map(settings.map((setting) => [setting.status, setting.durationDays]));
   const now = new Date();
+  const finalStatus = requestedStatus || currentTask.resultingStatus || currentStatus;
+  if (!isCrmStatus(finalStatus)) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("The CRM step has an invalid resulting status.")}`);
+  }
+  if (finalStatus !== currentStatus && (!isCrmStatus(currentStatus) || !allowedManualDowngrades(currentStatus).includes(finalStatus))) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("This CRM step would move the account status upward. Update the admin workflow or select a valid downgrade.")}`);
+  }
+  if (finalStatus === "None" && !parsed.data.completionNotes) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Enter completion notes when marking an account None.")}`);
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.followUp.create({
       data: {
         opportunityId: opportunity.id,
         followUpDate: now,
-        status: `${parsed.data.completedAction} Completed`,
-        notes: parsed.data.smsMessage || null,
+        status: `${currentTask.label} Completed`,
+        notes: parsed.data.completionNotes || null,
+        crmStepId: currentTask.id,
+        stepLabelSnapshot: currentTask.label,
+        messageSnapshot: parsed.data.message || null,
+        outcome: parsed.data.outcome,
+        completedBy: user.displayName,
+        statusBefore: currentStatus,
+        statusAfter: finalStatus,
       },
     });
+    if (finalStatus !== currentStatus) {
+      await tx.opportunityStatusHistory.create({ data: { opportunityId: opportunity.id, previousStatus: currentStatus, newStatus: finalStatus, source: "TASK", changedBy: user.displayName, notes: parsed.data.completionNotes || null } });
+    }
     await tx.membershipOpportunity.update({
       where: { id: opportunity.id },
       data: {
-        followUpStatus: next.status,
-        nextFollowUpDate: next.dueDate,
+        followUpStatus: `${currentTask.label} Completed`,
+        nextFollowUpDate: null,
         lastFollowUpDate: now,
+        interestLevel: finalStatus,
+        ...(finalStatus !== currentStatus ? { statusSinceAt: now, statusDowngradeAt: calculateDowngradeDate(finalStatus, now, durations), statusSource: "TASK" } : {}),
       },
     });
     await tx.auditLog.create({
@@ -411,8 +451,8 @@ export async function completeOpportunityTaskAction(formData: FormData) {
         action: "OPPORTUNITY_TASK_COMPLETED",
         recordType: "MembershipOpportunity",
         recordId: opportunity.id,
-        previousValue: parsed.data.completedAction,
-        newValue: next.status,
+        previousValue: currentTask.label,
+        newValue: `${currentTask.label} Completed; ${currentStatus} -> ${finalStatus}`,
       },
     });
   });
@@ -420,6 +460,37 @@ export async function completeOpportunityTaskAction(formData: FormData) {
   revalidatePath("/opportunities");
   revalidatePath(`/opportunities/${opportunity.id}`);
   redirect(`/opportunities/${opportunity.id}?task=completed`);
+}
+
+export async function changeOpportunityStatusAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  const parsed = opportunityStatusChangeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/opportunities/${formData.get("opportunityId")}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the status change.")}`);
+  }
+  const prisma = getPrisma();
+  const opportunity = await prisma.membershipOpportunity.findUnique({ where: { id: parsed.data.opportunityId }, include: { sale: true } });
+  if (!opportunity || opportunity.status !== "OPEN" || opportunity.sale) {
+    redirect(`/opportunities/${parsed.data.opportunityId}?error=${encodeURIComponent("Only open, unsold opportunities can be downgraded.")}`);
+  }
+  if (!isCrmStatus(opportunity.interestLevel) || !allowedManualDowngrades(opportunity.interestLevel).includes(parsed.data.newStatus)) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Account status can only be moved downward.")}`);
+  }
+  if (parsed.data.newStatus === "None" && !parsed.data.notes) {
+    redirect(`/opportunities/${opportunity.id}?error=${encodeURIComponent("Enter a reason when marking an account None.")}`);
+  }
+  await ensureCrmStatusSettings(prisma);
+  const settings = await prisma.crmStatusSetting.findMany();
+  const durations = new Map(settings.map((setting) => [setting.status, setting.durationDays]));
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.membershipOpportunity.update({ where: { id: opportunity.id }, data: { interestLevel: parsed.data.newStatus, statusSinceAt: now, statusDowngradeAt: calculateDowngradeDate(parsed.data.newStatus, now, durations), statusSource: "MANUAL", followUpStatus: "Follow Up Needed", nextFollowUpDate: null } });
+    await tx.opportunityStatusHistory.create({ data: { opportunityId: opportunity.id, previousStatus: opportunity.interestLevel, newStatus: parsed.data.newStatus, source: "MANUAL", changedBy: user.displayName, notes: parsed.data.notes || null } });
+    await tx.auditLog.create({ data: { actingUser: user.role, action: "ACCOUNT_STATUS_DOWNGRADED", recordType: "MembershipOpportunity", recordId: opportunity.id, previousValue: opportunity.interestLevel, newValue: parsed.data.newStatus, reason: parsed.data.notes || null } });
+  });
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${opportunity.id}`);
+  redirect(`/opportunities/${opportunity.id}?status=updated`);
 }
 
 export async function recordSaleAction(formData: FormData) {
@@ -967,7 +1038,7 @@ export async function updateCrmStepTemplateAction(formData: FormData) {
   const user = await requireCurrentUser();
   const role = user.role;
   requireAdmin(role);
-  const parsed = crmStepTemplateSchema.safeParse(Object.fromEntries(formData));
+  const parsed = crmStepTemplateSchema.safeParse({ ...Object.fromEntries(formData), applicableStatuses: formData.getAll("applicableStatuses") });
   if (!parsed.success) {
     redirect(`/admin?section=other&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the CRM step.")}`);
   }
@@ -979,11 +1050,37 @@ export async function updateCrmStepTemplateAction(formData: FormData) {
 
   const step = await getPrisma().crmStepTemplate.update({
     where: { id: existing.id },
-    data: { content: parsed.data.content },
+    data: {
+      content: parsed.data.content,
+      communicationType: parsed.data.communicationType,
+      delayDays: parsed.data.delayDays,
+      applicableStatuses: parsed.data.applicableStatuses.join(","),
+      active: parsed.data.active === "true",
+      resultingStatus: parsed.data.resultingStatus || null,
+    },
   });
   await auditAdminChange(role, "CRM_STEP_TEMPLATE_EDITED", "CrmStepTemplate", step.id, step.label);
   revalidatePath("/admin");
   redirect("/admin?section=other&crm=updated");
+}
+
+export async function updateCrmStatusSettingAction(formData: FormData) {
+  const user = await requireCurrentUser();
+  requireAdmin(user.role);
+  const parsed = crmStatusSettingSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`/admin?section=other&error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Check the account-status duration.")}`);
+  }
+  const prisma = getPrisma();
+  const setting = await prisma.crmStatusSetting.upsert({ where: { status: parsed.data.status }, update: { durationDays: parsed.data.durationDays }, create: { status: parsed.data.status, durationDays: parsed.data.durationDays } });
+  if (parsed.data.recalculateExisting === "true") {
+    const opportunities = await prisma.membershipOpportunity.findMany({ where: { status: "OPEN", interestLevel: parsed.data.status, sale: null } });
+    await prisma.$transaction(opportunities.map((opportunity) => prisma.membershipOpportunity.update({ where: { id: opportunity.id }, data: { statusDowngradeAt: calculateDowngradeDate(parsed.data.status, opportunity.statusSinceAt, new Map([[parsed.data.status, parsed.data.durationDays]])) } })));
+  }
+  await auditAdminChange(user.role, "CRM_STATUS_DURATION_EDITED", "CrmStatusSetting", setting.id, `${setting.status}: ${setting.durationDays} days`);
+  revalidatePath("/admin");
+  revalidatePath("/opportunities");
+  redirect("/admin?section=other&crmStatus=updated");
 }
 
 export async function updateClientRecordAction(formData: FormData) {
@@ -1029,6 +1126,11 @@ export async function updateClientRecordAction(formData: FormData) {
   const firstVisitCredit = membershipSaleDate ? isFirstVisitSale(firstVisitDate, membershipSaleDate) : false;
   const lastFollowUpDate = optionalDate(data.lastFollowUpDate);
   const nextFollowUpDate = optionalDate(data.nextFollowUpDate);
+  const interestChanged = existing.opportunity.interestLevel !== data.interestLevel;
+  await ensureCrmStatusSettings(prisma);
+  const crmSettings = await prisma.crmStatusSetting.findMany();
+  const crmDurations = new Map(crmSettings.map((setting) => [setting.status, setting.durationDays]));
+  const statusChangedAt = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.client.update({
       where: { id: data.clientId },
@@ -1052,6 +1154,7 @@ export async function updateClientRecordAction(formData: FormData) {
         locationId: data.locationId,
         firstVisitTherapistId: data.firstVisitTherapistId || null,
         interestLevel: data.interestLevel,
+        ...(interestChanged ? { statusSinceAt: statusChangedAt, statusDowngradeAt: calculateDowngradeDate(data.interestLevel, statusChangedAt, crmDurations), statusSource: "ADMIN_CORRECTION" } : {}),
         proposedPrimaryCloserId: data.proposedPrimaryCloserId,
         proposedSupportCloserId: supportCloserId,
         collectedBy: data.collectedBy,
@@ -1064,6 +1167,9 @@ export async function updateClientRecordAction(formData: FormData) {
         nextFollowUpDate,
       },
     });
+    if (interestChanged) {
+      await tx.opportunityStatusHistory.create({ data: { opportunityId: data.opportunityId, previousStatus: existing.opportunity!.interestLevel, newStatus: data.interestLevel, source: "ADMIN_CORRECTION", changedBy: user.displayName, notes: data.followUpNotes || null } });
+    }
     if (existingSale && membershipSaleDate) {
       await tx.membershipSale.update({
         where: { id: existingSale.id },

@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { createSaleCredits, isFirstVisitSale } from "../src/lib/commission";
 import { getPrisma } from "../src/lib/db";
 import { crmStepTemplates } from "../src/lib/crm-steps";
-import { normalizePhone, toLocalDate } from "../src/lib/format";
+import { addCalendarDays, normalizePhone, toLocalDate } from "../src/lib/format";
 import { hashPassword } from "../src/lib/passwords";
 
 const prisma: PrismaClient = getPrisma();
@@ -15,9 +15,11 @@ async function main() {
   await prisma.membershipSale.deleteMany();
   await prisma.specialSpiffAward.deleteMany();
   await prisma.followUp.deleteMany();
+  await prisma.opportunityStatusHistory.deleteMany();
   await prisma.membershipOpportunity.deleteMany();
   await prisma.client.deleteMany();
   await prisma.crmStepTemplate.deleteMany();
+  await prisma.crmStatusSetting.deleteMany();
   await prisma.specialSpiff.deleteMany();
   await prisma.commissionSetting.deleteMany();
   await prisma.membershipType.deleteMany();
@@ -111,7 +113,16 @@ async function main() {
       label: template.label,
       content: template.defaultContent,
       sortOrder: template.sortOrder,
+      communicationType: template.communicationType,
+      delayDays: template.delayDays,
     })),
+  });
+  await prisma.crmStatusSetting.createMany({
+    data: [
+      { status: "Hot", durationDays: 30 },
+      { status: "Warm", durationDays: 30 },
+      { status: "Cold", durationDays: 360 },
+    ],
   });
 
   async function createOpportunity(input: {
@@ -152,6 +163,8 @@ async function main() {
         locationId: locationByCode[input.locationCode].id,
         firstVisitTherapistId: staff[input.therapist ?? "Dennis"]?.id,
         interestLevel: input.interestLevel ?? "Warm",
+        statusSinceAt: new Date(),
+        statusDowngradeAt: addCalendarDays(new Date(), (input.interestLevel ?? "Warm") === "Cold" ? 360 : 30),
         proposedPrimaryCloserId: staff[input.primary].id,
         proposedSupportCloserId: input.support ? staff[input.support].id : null,
         status: input.status ?? "OPEN",

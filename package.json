@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset --force",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "crm:reconcile": "tsx prisma/reconcile-crm.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

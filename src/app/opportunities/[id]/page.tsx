@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
-import { closeOpportunityAction, recordSaleAction, recordSpecialSpiffAction, updateOpportunityClosersAction } from "@/app/actions";
-import { getFormOptions, getOpportunity, getSpecialSpiffEntryOptions } from "@/lib/data";
+import { changeOpportunityStatusAction, closeOpportunityAction, recordSaleAction, recordSpecialSpiffAction, updateOpportunityClosersAction } from "@/app/actions";
+import { getActiveCrmSteps, getFormOptions, getOpportunity, getSpecialSpiffEntryOptions, nextCrmTask } from "@/lib/data";
 import { currentDateInputValue, displayStatus, formatBasisPointsPercent, formatDateTime, formatDisplayDate, formatMoney } from "@/lib/format";
 import { canManage } from "@/lib/roles";
 import { displayClientSession } from "@/lib/session-options";
 import { getCurrentUser } from "@/lib/session";
 import { findStaffForUser } from "@/lib/current-staff";
-import { getOpportunityNextAction } from "@/lib/opportunity-next-action";
+import { allowedManualDowngrades, isCrmStatus } from "@/lib/crm-status";
 import { NextActionCard } from "./next-action-card";
 
 type PageProps = {
@@ -16,7 +16,7 @@ type PageProps = {
 
 export default async function OpportunityDetailPage({ params, searchParams }: PageProps) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const [opportunity, options, specialSpiffOptions, user] = await Promise.all([getOpportunity(id), getFormOptions(), getSpecialSpiffEntryOptions(), getCurrentUser()]);
+  const [opportunity, options, specialSpiffOptions, user, crmSteps] = await Promise.all([getOpportunity(id), getFormOptions(), getSpecialSpiffEntryOptions(), getCurrentUser(), getActiveCrmSteps()]);
   if (!opportunity) {
     notFound();
   }
@@ -32,12 +32,8 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
   const canAssignSpecialSpiff = canManage(user?.role ?? "");
   const usedSpecialSpiffIds = new Set(opportunity.client.specialSpiffAwards.map((award) => award.specialSpiffId));
   const availableSpecialSpiffs = specialSpiffOptions.specialSpiffs.filter((spiff) => !usedSpecialSpiffIds.has(spiff.id));
-  const nextAction = getOpportunityNextAction({
-    interestLevel: opportunity.interestLevel,
-    firstVisitDate: opportunity.client.firstVisitDate,
-    followUpStatus: opportunity.followUpStatus,
-    nextFollowUpDate: opportunity.nextFollowUpDate,
-  });
+  const nextAction = nextCrmTask(opportunity, crmSteps);
+  const downgradeOptions = isCrmStatus(opportunity.interestLevel) ? allowedManualDowngrades(opportunity.interestLevel) : [];
   const smsMessage = buildPersonalSms({
     clientFirstName: opportunity.client.firstName,
     firstVisitDate: formatDisplayDate(opportunity.client.firstVisitDate),
@@ -86,12 +82,28 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
           {nextAction ? (
             <NextActionCard
               opportunityId={opportunity.id}
+              crmStepId={nextAction.id}
               actionLabel={nextAction.label}
-              dueDate={nextAction.dueDate ? formatDisplayDate(nextAction.dueDate) : null}
-              isLate={nextAction.isLate}
-              canComplete={nextAction.canComplete}
-              defaultMessage={smsMessage}
+              communicationType={nextAction.communicationType}
+              dueDate={formatDisplayDate(nextAction.dueDate)}
+              isLate={nextAction.dueDate.getTime() < new Date().getTime()}
+              canComplete={opportunity.status === "OPEN" && !opportunity.sale}
+              defaultMessage={nextAction.content || smsMessage}
+              downgradeOptions={downgradeOptions}
             />
+          ) : null}
+
+          {opportunity.status === "OPEN" && !opportunity.sale && downgradeOptions.length > 0 ? (
+            <div className="card p-4">
+              <h2 className="section-title mb-3">Account Status</h2>
+              <p className="mb-3 text-sm text-[var(--text-muted)]">Current: {opportunity.interestLevel}. Scheduled downgrade: {opportunity.statusDowngradeAt ? formatDisplayDate(opportunity.statusDowngradeAt) : "None"}.</p>
+              <form action={changeOpportunityStatusAction} className="grid gap-3 md:grid-cols-[1fr_2fr_auto]">
+                <input type="hidden" name="opportunityId" value={opportunity.id} />
+                <select className="field" name="newStatus" required><option value="">Downgrade to</option>{downgradeOptions.map((status) => <option key={status}>{status}</option>)}</select>
+                <input className="field" name="notes" placeholder="Reason or note (required for None)" />
+                <button className="button-secondary" type="submit">Change status</button>
+              </form>
+            </div>
           ) : null}
 
           {!opportunity.sale && opportunity.status === "OPEN" ? (
@@ -165,6 +177,11 @@ export default async function OpportunityDetailPage({ params, searchParams }: Pa
             )}
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="card p-4"><h2 className="section-title mb-3">Completed CRM Tasks</h2><div className="space-y-3">{opportunity.followUps.filter((item) => item.crmStepId).map((item) => <div key={item.id} className="rounded-[8px] border border-[var(--border)] p-3 text-sm"><p className="font-semibold">{item.stepLabelSnapshot ?? item.status}</p><p className="text-[var(--text-muted)]">{formatDateTime(item.createdAt)} by {item.completedBy ?? "Unknown"} · {item.outcome ? displayStatus(item.outcome) : "Completed"}</p>{item.notes ? <p className="mt-2">{item.notes}</p> : null}</div>)}{opportunity.followUps.filter((item) => item.crmStepId).length === 0 ? <p className="empty-state">No CRM tasks completed yet.</p> : null}</div></div>
+        <div className="card p-4"><h2 className="section-title mb-3">Account Status History</h2><div className="space-y-3">{opportunity.statusHistory.map((item) => <div key={item.id} className="rounded-[8px] border border-[var(--border)] p-3 text-sm"><p className="font-semibold">{item.previousStatus} → {item.newStatus}</p><p className="text-[var(--text-muted)]">{formatDateTime(item.changedAt)} · {displayStatus(item.source)}{item.changedBy ? ` by ${item.changedBy}` : ""}</p>{item.notes ? <p className="mt-2">{item.notes}</p> : null}</div>)}{opportunity.statusHistory.length === 0 ? <p className="empty-state">No status changes recorded yet.</p> : null}</div></div>
       </section>
 
       <section className="card p-4">

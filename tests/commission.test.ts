@@ -13,7 +13,8 @@ import {
 import { clientEntrySchema, opportunityCloserSchema, saleEntrySchema } from "../src/lib/validation";
 import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, formatDisplayDate, monthRange, toLocalDate } from "../src/lib/format";
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
-import { summarizePendingSalesByStaff } from "../src/lib/data";
+import { buildClientCloserFilter, buildClientSearchFilter, nextCrmTask, summarizePendingSalesByStaff } from "../src/lib/data";
+import { allowedManualDowngrades, calculateDowngradeDate, nextAutomaticStatus } from "../src/lib/crm-status";
 import { getNavItems, isActivePath } from "../src/lib/navigation";
 import { staffMatchesUser } from "../src/lib/current-staff";
 import { newClientValuesFromFormData, splitClientName } from "../src/lib/client-form-state";
@@ -411,5 +412,70 @@ describe("opportunity next actions", () => {
 
     expect(next.status).toBe("Phone Outreach");
     expect(next.dueDate?.toISOString().slice(0, 10)).toBe("2026-07-15");
+  });
+});
+
+describe("CRM account status lifecycle", () => {
+  const durations = new Map([["Hot", 30], ["Warm", 30], ["Cold", 360]]);
+
+  it("moves Hot and Warm to Cold, then Cold to terminal None", () => {
+    expect(nextAutomaticStatus("Hot")).toBe("Cold");
+    expect(nextAutomaticStatus("Warm")).toBe("Cold");
+    expect(nextAutomaticStatus("Cold")).toBe("None");
+    expect(nextAutomaticStatus("None")).toBeNull();
+  });
+
+  it("calculates status downgrade dates from the status start date", () => {
+    expect(dateInputValue(calculateDowngradeDate("Hot", toLocalDate("2026-09-01"), durations)!)).toBe("2026-10-01");
+    expect(dateInputValue(calculateDowngradeDate("Cold", toLocalDate("2026-09-01"), durations)!)).toBe("2027-08-27");
+    expect(calculateDowngradeDate("None", toLocalDate("2026-09-01"), durations)).toBeNull();
+  });
+
+  it("only permits downward manual changes", () => {
+    expect(allowedManualDowngrades("Hot")).toEqual(["Warm", "Cold", "None"]);
+    expect(allowedManualDowngrades("Warm")).toEqual(["Cold", "None"]);
+    expect(allowedManualDowngrades("Cold")).toEqual(["None"]);
+    expect(allowedManualDowngrades("None")).toEqual([]);
+  });
+
+  it("selects the first applicable incomplete admin CRM step", () => {
+    const steps = [
+      { id: "text", label: "Initial Text", content: "Hello", communicationType: "SMS", delayDays: 1, applicableStatuses: "Hot,Warm", resultingStatus: null },
+      { id: "call", label: "Call", content: "", communicationType: "PHONE", delayDays: 2, applicableStatuses: "Hot,Warm,Cold", resultingStatus: null },
+    ];
+    const task = nextCrmTask({ interestLevel: "Hot", statusSinceAt: toLocalDate("2026-09-01"), followUps: [{ crmStepId: "text", createdAt: toLocalDate("2026-09-03") }] }, steps);
+    expect(task?.id).toBe("call");
+    expect(dateInputValue(task!.dueDate)).toBe("2026-09-05");
+  });
+});
+
+describe("administrator client search", () => {
+  it("matches a closer across proposals, final sale assignments, and credit rows", () => {
+    expect(buildClientCloserFilter("abbott-id")).toEqual({
+      OR: [
+        { proposedPrimaryCloserId: "abbott-id" },
+        { proposedSupportCloserId: "abbott-id" },
+        { sale: { is: { finalPrimaryCloserId: "abbott-id" } } },
+        { sale: { is: { finalSupportCloserId: "abbott-id" } } },
+        { sale: { is: { credits: { some: { staffId: "abbott-id" } } } } },
+      ],
+    });
+  });
+
+  it("matches every word of a full name across first and last name fields", () => {
+    expect(buildClientSearchFilter("John Day")).toEqual({
+      AND: [
+        { OR: [{ firstName: { contains: "John" } }, { lastName: { contains: "John" } }] },
+        { OR: [{ firstName: { contains: "Day" } }, { lastName: { contains: "Day" } }] },
+      ],
+    });
+  });
+
+  it("uses only normalized digits for a phone search", () => {
+    expect(buildClientSearchFilter("858-444")).toEqual({ phoneNormalized: { contains: "858444" } });
+  });
+
+  it("does not add an empty phone condition to a name search", () => {
+    expect(JSON.stringify(buildClientSearchFilter("John"))).not.toContain("phoneNormalized");
   });
 });

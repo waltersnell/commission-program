@@ -6,6 +6,7 @@ import {
   deactivateUserAction,
   deleteSpecialSpiffAction,
   updateCommissionSettingAction,
+  updateCrmStatusSettingAction,
   updateMembershipTypeAction,
   updateSpecialSpiffAction,
   updateStaffAction,
@@ -201,6 +202,19 @@ export default async function AdminPage({ searchParams }: PageProps) {
       </div> : null}
 
       {activeSection === "other" ? <div className="admin-section-stack">
+      <AdminPanel title="Account Status Aging" collapsible={false}>
+        <p className="mb-3 text-sm text-[var(--text-muted)]">Hot and Warm automatically move to Cold. Cold automatically moves to None. None is the terminal do-not-contact status.</p>
+        <div className="space-y-3">
+          {data.crmStatusSettings.map((setting) => (
+            <form key={setting.id} action={updateCrmStatusSettingAction} className="grid gap-3 rounded-[8px] border border-[var(--border)] p-3 md:grid-cols-[1fr_1fr_auto]">
+              <input type="hidden" name="status" value={setting.status} />
+              <label className="grid gap-1"><span className="font-semibold">{setting.status}</span><span className="text-xs text-[var(--text-muted)]">{setting.status === "Cold" ? "Automatically becomes None" : "Automatically becomes Cold"}</span></label>
+              <label className="grid gap-1"><span className="text-sm font-semibold">Days before downgrade</span><input className="field" name="durationDays" type="number" min="1" max="3650" defaultValue={setting.durationDays} required /></label>
+              <div className="flex flex-col items-start gap-2"><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="recalculateExisting" value="true" />Recalculate existing</label><button className="button-primary" type="submit">Save duration</button></div>
+            </form>
+          ))}
+        </div>
+      </AdminPanel>
       <AdminPanel title="CRM Steps" collapsible={false}>
         <CrmStepsEditor steps={data.crmSteps} />
       </AdminPanel>

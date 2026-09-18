@@ -1,12 +1,25 @@
 # Handoff
 
-Last updated: 2026-09-06
+Last updated: 2026-09-18
 
 ## Current State
 
 The app is a local Next.js/TypeScript/Prisma SQLite commission tracker for Thai Sport Bodyworks. It has login protection, local user management, administrator-managed commissionable staff, first-time client intake, opportunities, membership sales, commission summaries, and month-end flows.
 
 Latest additional local feature set: commission details, Family Upgrade, Special Spiffs, and administrator Run Payroll reporting.
+
+Latest CRM lifecycle feature set:
+
+- Administrators manage Hot, Warm, and Cold aging durations under Other Settings. Defaults are Hot 30 days to Cold, Warm 30 days to Cold, and Cold 360 days to None. None is terminal.
+- Open, unsold opportunities store their status start, scheduled downgrade, and source. Automatic, manual, task-driven, and administrator-correction changes create durable status-history rows.
+- Opportunity reads reconcile overdue statuses idempotently; `npm run crm:reconcile` supports unattended daily VPS scheduling.
+- Cold and None remain on the Opportunities page, with a status filter and scheduled downgrade column. Manual operational changes are downward only; administrators can correct status through Client Lookup.
+- Admin CRM Steps are now the authoritative workflow. Each step has channel, order, delay, applicable statuses, active state, content, and an optional resulting status. The default order is Initial Text, Initial Voice, Final Text, Initial Email, Final Email.
+- Task completion snapshots the CRM step label and message/script separately from completion notes, outcome, actor, and before/after status. Opportunity detail displays completed-task and status histories.
+- Additive migration: `20260918090000_add_crm_status_lifecycle`; it preserves existing client/sale/commission records and initializes existing status clocks from opportunity creation dates.
+- Verification on 2026-09-18: TypeScript, ESLint, 44 Vitest tests, all migrations applied directly to disposable SQLite, disposable seed/reconciliation, and authenticated browser flow. Browser flow confirmed admin defaults/step controls, task notes plus Warm-to-Cold completion, Cold visibility on Opportunities, next-step advancement, and no console warnings/errors.
+- Administrator Client Search now tokenizes full names across `firstName` and `lastName` and only adds phone matching for numeric searches. This fixes full-name searches such as `John Day` returning no result; verified against the local database and with 47 passing tests.
+- Client Search closer filtering now includes proposed primary/support closers, final sale primary/support closers, and `SaleCredit` staff. A disposable-database integration check confirmed an Abbott pending sale remains visible when its proposed closer differs from its final credited closer; 48 tests pass.
 
 - Commission Progress links each staff member to transaction-level membership and Special Spiff detail while preserving the approved-only Commission Progress rule from current `main`.
 - Family Upgrade is a flat configurable commission type that adds no tier credit or first-visit bonus. Special Spiff definitions and awards snapshot their saved amount and follow the existing pending approval workflow.

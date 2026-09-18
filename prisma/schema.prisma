@@ -100,17 +100,21 @@ model MembershipOpportunity {
   followUpOwnerId         String?
   followUpStatus          String    @default("Follow Up Needed")
   followUpNotes           String?
+  statusSinceAt           DateTime  @default(now())
+  statusDowngradeAt       DateTime?
+  statusSource            String    @default("MANUAL")
   intakeSubmittedAt       DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  client                Client          @relation(fields: [clientId], references: [id])
-  location              Location        @relation(fields: [locationId], references: [id])
-  firstVisitTherapist   Staff?          @relation("FirstVisitTherapist", fields: [firstVisitTherapistId], references: [id])
-  proposedPrimaryCloser Staff           @relation("ProposedPrimaryCloser", fields: [proposedPrimaryCloserId], references: [id])
-  proposedSupportCloser Staff?          @relation("ProposedSupportCloser", fields: [proposedSupportCloserId], references: [id])
+  client                Client                     @relation(fields: [clientId], references: [id])
+  location              Location                   @relation(fields: [locationId], references: [id])
+  firstVisitTherapist   Staff?                     @relation("FirstVisitTherapist", fields: [firstVisitTherapistId], references: [id])
+  proposedPrimaryCloser Staff                      @relation("ProposedPrimaryCloser", fields: [proposedPrimaryCloserId], references: [id])
+  proposedSupportCloser Staff?                     @relation("ProposedSupportCloser", fields: [proposedSupportCloserId], references: [id])
   sale                  MembershipSale?
   followUps             FollowUp[]
+  statusHistory         OpportunityStatusHistory[]
 
   @@index([status])
   @@index([locationId])
@@ -163,15 +167,45 @@ model SaleCredit {
 }
 
 model FollowUp {
-  id            String   @id @default(cuid())
-  opportunityId String
-  followUpDate  DateTime
-  ownerId       String?
-  status        String
-  notes         String?
-  createdAt     DateTime @default(now())
+  id                String   @id @default(cuid())
+  opportunityId     String
+  followUpDate      DateTime
+  ownerId           String?
+  status            String
+  notes             String?
+  crmStepId         String?
+  stepLabelSnapshot String?
+  messageSnapshot   String?
+  outcome           String?
+  completedBy       String?
+  statusBefore      String?
+  statusAfter       String?
+  createdAt         DateTime @default(now())
 
   opportunity MembershipOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+}
+
+model OpportunityStatusHistory {
+  id             String   @id @default(cuid())
+  opportunityId  String
+  previousStatus String
+  newStatus      String
+  source         String
+  changedBy      String?
+  notes          String?
+  changedAt      DateTime @default(now())
+
+  opportunity MembershipOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId, changedAt])
+}
+
+model CrmStatusSetting {
+  id           String   @id @default(cuid())
+  status       String   @unique
+  durationDays Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model CommissionPeriod {
@@ -219,13 +253,18 @@ model CommissionSetting {
 }
 
 model CrmStepTemplate {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  label     String
-  content   String   @default("")
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  key                String   @unique
+  label              String
+  content            String   @default("")
+  sortOrder          Int      @default(0)
+  communicationType  String   @default("SMS")
+  delayDays          Int      @default(0)
+  applicableStatuses String   @default("Hot,Warm,Cold")
+  active             Boolean  @default(true)
+  resultingStatus    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model SpecialSpiff {

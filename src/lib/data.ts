@@ -8,7 +8,8 @@ import {
 } from "./commission";
 import { getPrisma } from "./db";
 import { crmStepTemplates } from "./crm-steps";
-import { monthKey, monthRange, startOfCurrentCalendarDay } from "./format";
+import { addCalendarDays, monthKey, monthRange, startOfCurrentCalendarDay } from "./format";
+import { ensureCrmStatusSettings, reconcileDueOpportunityStatuses } from "./crm-status";
 import { canManage, isCloserRole } from "./roles";
 import { matchStaffForUser, staffMatchesUser } from "./current-staff";
 import {
@@ -124,6 +125,7 @@ export async function getOpportunities(
   scope: OpportunityScope = visibleStaffId ? "assigned" : "all",
 ) {
   const prisma = getPrisma();
+  await reconcileDueOpportunityStatuses(prisma);
   const page = Number(params.page ?? 1);
   const take = 25;
   const paginate = !visibleStaffId;
@@ -131,6 +133,7 @@ export async function getOpportunities(
   const search = scalar(params.search);
   const locationId = scalar(params.locationId);
   const closerId = scalar(params.closerId);
+  const accountStatus = scalar(params.accountStatus);
 
   const andFilters: Prisma.MembershipOpportunityWhereInput[] = [];
 
@@ -170,7 +173,7 @@ export async function getOpportunities(
 
   const where: Prisma.MembershipOpportunityWhereInput = {
     status: "OPEN",
-    interestLevel: { in: ["Hot", "Warm"] },
+    interestLevel: accountStatus ? accountStatus : { in: ["Hot", "Warm", "Cold", "None"] },
     ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
 
@@ -185,15 +188,18 @@ export async function getOpportunities(
         firstVisitTherapist: true,
         proposedPrimaryCloser: true,
         proposedSupportCloser: true,
+        followUps: { orderBy: { createdAt: "desc" } },
       },
     }),
     prisma.membershipOpportunity.count({ where }),
   ]);
 
   const now = Date.now();
+  const steps = await prisma.crmStepTemplate.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
   const rowsWithDaysOpen = rows.map((row) => ({
     ...row,
     daysOpen: Math.max(0, Math.floor((now - row.createdAt.getTime()) / 86_400_000)),
+    nextCrmTask: nextCrmTask(row, steps),
   }));
 
   return {
@@ -205,7 +211,9 @@ export async function getOpportunities(
 }
 
 export async function getOpportunity(id: string) {
-  return getPrisma().membershipOpportunity.findUnique({
+  const prisma = getPrisma();
+  await reconcileDueOpportunityStatuses(prisma);
+  return prisma.membershipOpportunity.findUnique({
     where: { id },
     include: {
       client: {
@@ -229,8 +237,26 @@ export async function getOpportunity(id: string) {
         },
       },
       followUps: { orderBy: { createdAt: "desc" } },
+      statusHistory: { orderBy: { changedAt: "desc" } },
     },
   });
+}
+
+export async function getActiveCrmSteps() {
+  return getPrisma().crmStepTemplate.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] });
+}
+
+export function nextCrmTask(
+  opportunity: { interestLevel: string; statusSinceAt: Date; followUps: { crmStepId: string | null; createdAt: Date }[] },
+  steps: { id: string; label: string; content: string; communicationType: string; delayDays: number; applicableStatuses: string; resultingStatus: string | null }[],
+) {
+  const completed = new Set(opportunity.followUps.map((followUp) => followUp.crmStepId).filter(Boolean));
+  const applicable = steps.filter((step) => step.applicableStatuses.split(",").map((status) => status.trim()).includes(opportunity.interestLevel));
+  const step = applicable.find((candidate) => !completed.has(candidate.id));
+  if (!step) return null;
+  const previousCompletion = opportunity.followUps.find((followUp) => followUp.crmStepId && completed.has(followUp.crmStepId));
+  const dueDate = addCalendarDays(previousCompletion?.createdAt ?? opportunity.statusSinceAt, step.delayDays);
+  return { ...step, dueDate };
 }
 
 export async function getSpecialSpiffEntryOptions() {
@@ -634,6 +660,7 @@ export function summarizePendingSalesByStaff(sales: PendingSaleForSummary[]): Pe
 
 export async function getAdminData() {
   const prisma = getPrisma();
+  await ensureCrmStatusSettings(prisma);
   await Promise.all(
     crmStepTemplates.map((template) =>
       prisma.crmStepTemplate.upsert({
@@ -641,30 +668,35 @@ export async function getAdminData() {
         update: {
           label: template.label,
           sortOrder: template.sortOrder,
+          communicationType: template.communicationType,
+          delayDays: template.delayDays,
         },
         create: {
           key: template.key,
           label: template.label,
           content: template.defaultContent,
           sortOrder: template.sortOrder,
+          communicationType: template.communicationType,
+          delayDays: template.delayDays,
         },
       }),
     ),
   );
-  const [users, staff, locations, membershipTypes, settings, crmSteps, specialSpiffs, auditLogs] = await Promise.all([
+  const [users, staff, locations, membershipTypes, settings, crmSteps, crmStatusSettings, specialSpiffs, auditLogs] = await Promise.all([
     prisma.user.findMany({ orderBy: [{ active: "desc" }, { displayName: "asc" }] }),
     prisma.staff.findMany({ orderBy: { displayName: "asc" } }),
     prisma.location.findMany({ orderBy: { code: "asc" } }),
     prisma.membershipType.findMany({ orderBy: { name: "asc" } }),
     prisma.commissionSetting.findMany({ orderBy: { key: "asc" } }),
     prisma.crmStepTemplate.findMany({ orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
+    prisma.crmStatusSetting.findMany({ orderBy: { durationDays: "asc" } }),
     prisma.specialSpiff.findMany({
       include: { _count: { select: { awards: true } } },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     }),
     prisma.auditLog.findMany({ take: 30, orderBy: { createdAt: "desc" } }),
   ]);
-  return { users, staff, locations, membershipTypes, settings, crmSteps, specialSpiffs, auditLogs };
+  return { users, staff, locations, membershipTypes, settings, crmSteps, crmStatusSettings, specialSpiffs, auditLogs };
 }
 
 export async function getClientLookupData(params: Record<string, string | string[] | undefined>) {
@@ -676,19 +708,11 @@ export async function getClientLookupData(params: Record<string, string | string
   const opportunityFilter = locationId || closerId
     ? {
         ...(locationId ? { locationId } : {}),
-        ...(closerId ? { proposedPrimaryCloserId: closerId } : {}),
+        ...(closerId ? buildClientCloserFilter(closerId) : {}),
       }
     : undefined;
   const where: Prisma.ClientWhereInput = {
-    ...(search
-      ? {
-          OR: [
-            { firstName: { contains: search } },
-            { lastName: { contains: search } },
-            { phoneNormalized: { contains: search.replace(/\D/g, "") } },
-          ],
-        }
-      : {}),
+    ...(search ? buildClientSearchFilter(search) : {}),
     ...(opportunityFilter ? { opportunity: opportunityFilter } : {}),
   };
   const include = {
@@ -713,6 +737,36 @@ export async function getClientLookupData(params: Record<string, string | string
   ]);
 
   return { rows, selected, search, locationId, closerId };
+}
+
+export function buildClientCloserFilter(closerId: string): Prisma.MembershipOpportunityWhereInput {
+  return {
+    OR: [
+      { proposedPrimaryCloserId: closerId },
+      { proposedSupportCloserId: closerId },
+      { sale: { is: { finalPrimaryCloserId: closerId } } },
+      { sale: { is: { finalSupportCloserId: closerId } } },
+      { sale: { is: { credits: { some: { staffId: closerId } } } } },
+    ],
+  };
+}
+
+export function buildClientSearchFilter(search: string): Prisma.ClientWhereInput {
+  const normalized = search.trim();
+  const digits = normalized.replace(/\D/g, "");
+  if (digits.length >= 3 && !/[a-z]/i.test(normalized)) {
+    return { phoneNormalized: { contains: digits } };
+  }
+
+  const nameTokens = normalized.split(/\s+/).filter(Boolean);
+  return {
+    AND: nameTokens.map((token) => ({
+      OR: [
+        { firstName: { contains: token } },
+        { lastName: { contains: token } },
+      ],
+    })),
+  };
 }
 
 export async function getSaleCreditInputs(month?: string): Promise<CommissionCreditInput[]> {

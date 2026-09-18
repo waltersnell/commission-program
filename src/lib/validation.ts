@@ -121,8 +121,23 @@ export const opportunityCloserSchema = z
 
 export const completeOpportunityTaskSchema = z.object({
   opportunityId: requiredString,
-  completedAction: requiredString,
-  smsMessage: optionalString,
+  crmStepId: requiredString,
+  message: optionalString,
+  completionNotes: optionalString,
+  outcome: z.enum(["INTERESTED", "NO_ANSWER", "FOLLOW_UP_LATER", "DOWNGRADED", "DO_NOT_CONTACT"]),
+  requestedStatus: optionalString,
+});
+
+export const opportunityStatusChangeSchema = z.object({
+  opportunityId: requiredString,
+  newStatus: z.enum(interestLevels),
+  notes: optionalString,
+});
+
+export const crmStatusSettingSchema = z.object({
+  status: z.enum(["Hot", "Warm", "Cold"]),
+  durationDays: z.coerce.number().int().min(1).max(3650),
+  recalculateExisting: z.string().optional(),
 });
 
 export const staffSchema = z.object({
@@ -228,6 +243,11 @@ export const crmStepTemplateSchema = z.object({
   stepId: requiredString,
   key: z.enum(crmStepKeys),
   content: z.string().trim().max(5000, "CRM step content must be 5,000 characters or less."),
+  communicationType: z.enum(["SMS", "EMAIL", "PHONE", "INTERNAL"]),
+  delayDays: z.coerce.number().int().min(0).max(365),
+  applicableStatuses: z.array(z.enum(interestLevels)).min(1, "Select at least one account status."),
+  active: z.enum(["true", "false"]),
+  resultingStatus: z.enum(["", "Warm", "Cold", "None"]),
 });
 
 export const loginSchema = z.object({
