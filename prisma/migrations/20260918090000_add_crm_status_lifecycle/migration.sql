@@ -1,4 +1,7 @@
-ALTER TABLE "MembershipOpportunity" ADD COLUMN "statusSinceAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;
+-- SQLite only permits constant defaults when adding a column. Existing rows are
+-- immediately backfilled from createdAt below, while Prisma supplies timestamps
+-- for newly created opportunities.
+ALTER TABLE "MembershipOpportunity" ADD COLUMN "statusSinceAt" DATETIME NOT NULL DEFAULT 0;
 ALTER TABLE "MembershipOpportunity" ADD COLUMN "statusDowngradeAt" DATETIME;
 ALTER TABLE "MembershipOpportunity" ADD COLUMN "statusSource" TEXT NOT NULL DEFAULT 'MANUAL';
 
