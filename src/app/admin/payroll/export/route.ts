@@ -55,7 +55,7 @@ export async function GET(request: Request) {
 
 function displayDate(date: Date) {
   const [year, month, day] = dateInputValue(date).split("-");
-  return `${day}/${month}/${year}`;
+  return `${month}/${day}/${year}`;
 }
 
 function cents(value: number) {

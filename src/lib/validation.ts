@@ -73,6 +73,7 @@ export const clientRecordEditSchema = refineClientEntry(
     followUpNotes: optionalString,
     lastFollowUpDate: optionalString,
     nextFollowUpDate: optionalString,
+    membershipTypeId: optionalString,
   }),
 );
 

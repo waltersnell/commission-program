@@ -162,13 +162,7 @@ export async function getOpportunities(
     andFilters.push({ proposedPrimaryCloserId: closerId });
   }
   if (search) {
-    andFilters.push({
-      OR: [
-        { client: { firstName: { contains: search } } },
-        { client: { lastName: { contains: search } } },
-        { client: { phoneNormalized: { contains: search.replace(/\D/g, "") } } },
-      ],
-    });
+    andFilters.push(buildOpportunityClientSearchFilter(search));
   }
 
   const where: Prisma.MembershipOpportunityWhereInput = {
@@ -767,7 +761,7 @@ export async function getClientLookupData(params: Record<string, string | string
         firstVisitTherapist: true,
         proposedPrimaryCloser: true,
         proposedSupportCloser: true,
-        sale: true,
+        sale: { include: { membershipType: true } },
       },
     },
   } as const;
@@ -812,6 +806,10 @@ export function buildClientSearchFilter(search: string): Prisma.ClientWhereInput
       ],
     })),
   };
+}
+
+export function buildOpportunityClientSearchFilter(search: string): Prisma.MembershipOpportunityWhereInput {
+  return { client: { is: buildClientSearchFilter(search) } };
 }
 
 export async function getSaleCreditInputs(month?: string): Promise<CommissionCreditInput[]> {

@@ -31,7 +31,18 @@ export function ClientRecordEditor({ client, options }: { client: ClientRecord; 
         <Field label="Email" name="email" type="email" defaultValue={client.email ?? ""} />
         <Field label="First visit" name="firstVisitDate" type="date" defaultValue={dateInputValue(client.firstVisitDate)} required />
         {opportunity.sale ? (
-          <Field label="Membership sale date" name="membershipSaleDate" type="date" defaultValue={dateInputValue(opportunity.sale.membershipSaleDate)} required />
+          <>
+            <Field label="Membership sale date" name="membershipSaleDate" type="date" defaultValue={dateInputValue(opportunity.sale.membershipSaleDate)} required />
+            <SelectField
+              label="Membership type"
+              name="membershipTypeId"
+              defaultValue={opportunity.sale.membershipTypeId}
+              options={uniqueValueOptions([
+                { value: opportunity.sale.membershipType.id, label: opportunity.sale.membershipType.name },
+                ...options.membershipTypes.map((type) => ({ value: type.id, label: type.name })),
+              ])}
+            />
+          </>
         ) : (
           <div className="card card-soft grid gap-1 p-3">
             <span className="text-sm font-semibold">Membership sale date</span>
@@ -169,4 +180,8 @@ function SelectField({
 
 function uniqueOptions(options: (string | null | undefined)[]) {
   return Array.from(new Set(options.filter((option): option is string => Boolean(option))));
+}
+
+function uniqueValueOptions(options: { value: string; label: string }[]) {
+  return Array.from(new Map(options.map((option) => [option.value, option])).values());
 }

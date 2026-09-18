@@ -13,7 +13,7 @@ import {
 import { clientEntrySchema, opportunityCloserSchema, saleEntrySchema } from "../src/lib/validation";
 import { currentDateInputValue, currentMonthKey, dateInputValue, formatDateTime, formatDisplayDate, monthRange, toLocalDate } from "../src/lib/format";
 import { getNextActionAfterCompletion, getOpportunityNextAction } from "../src/lib/opportunity-next-action";
-import { buildClientCloserFilter, buildClientSearchFilter, nextCrmTask, summarizePendingSalesByStaff } from "../src/lib/data";
+import { buildClientCloserFilter, buildClientSearchFilter, buildOpportunityClientSearchFilter, nextCrmTask, summarizePendingSalesByStaff } from "../src/lib/data";
 import { allowedManualDowngrades, calculateDowngradeDate, nextAutomaticStatus } from "../src/lib/crm-status";
 import { getNavItems, isActivePath } from "../src/lib/navigation";
 import { staffMatchesUser } from "../src/lib/current-staff";
@@ -170,11 +170,11 @@ describe("Pacific business dates", () => {
   });
 
   it("displays timestamps in Pacific time", () => {
-    expect(formatDateTime(new Date("2026-08-02T05:30:00.000Z"))).toBe("01/08/2026 22:30");
+    expect(formatDateTime(new Date("2026-08-02T05:30:00.000Z"))).toBe("08/01/2026 22:30");
   });
 
   it("displays date-only values as day, month, year", () => {
-    expect(formatDisplayDate(toLocalDate("2026-09-05"))).toBe("05/09/2026");
+    expect(formatDisplayDate(toLocalDate("2026-09-05"))).toBe("09/05/2026");
   });
 });
 
@@ -505,5 +505,18 @@ describe("administrator client search", () => {
 
   it("does not add an empty phone condition to a name search", () => {
     expect(JSON.stringify(buildClientSearchFilter("John"))).not.toContain("phoneNormalized");
+  });
+
+  it("uses the same full-name lookup for opportunities", () => {
+    expect(buildOpportunityClientSearchFilter("John Day")).toEqual({
+      client: {
+        is: {
+          AND: [
+            { OR: [{ firstName: { contains: "John" } }, { lastName: { contains: "John" } }] },
+            { OR: [{ firstName: { contains: "Day" } }, { lastName: { contains: "Day" } }] },
+          ],
+        },
+      },
+    });
   });
 });

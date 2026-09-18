@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAdminData, getClientLookupData, getFormOptions } from "@/lib/data";
-import { basisPointsToPercentInput, centsToDollarInput, dateInputValue, displayStatus, formatDateTime } from "@/lib/format";
+import { basisPointsToPercentInput, centsToDollarInput, dateInputValue, displayStatus, formatDateTime, formatDisplayDate } from "@/lib/format";
 import { canAdmin, roleLabel, roles, staffJobs } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/session";
 import { AdminPanel } from "./admin-panel";
@@ -278,8 +278,8 @@ export default async function AdminPage({ searchParams }: PageProps) {
                   {clientLookup.rows.map((client) => (
                     <tr key={client.id}>
                       <td>{client.firstName} {client.lastName}</td>
-                      <td>{dateInputValue(client.firstVisitDate)}</td>
-                      <td>{client.opportunity?.sale ? dateInputValue(client.opportunity.sale.membershipSaleDate) : "-"}</td>
+                      <td>{formatDisplayDate(client.firstVisitDate)}</td>
+                      <td>{client.opportunity?.sale ? formatDisplayDate(client.opportunity.sale.membershipSaleDate) : "-"}</td>
                       <td>{client.opportunity?.location.code ?? "-"}</td>
                       <td>{client.opportunity?.proposedPrimaryCloser.displayName ?? "-"}</td>
                       <td>{client.opportunity ? displayStatus(client.opportunity.status) : "-"}</td>

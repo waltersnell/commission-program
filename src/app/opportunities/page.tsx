@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getFormOptions, getOpportunities } from "@/lib/data";
-import { dateInputValue, formatDisplayDate } from "@/lib/format";
+import { formatDisplayDate } from "@/lib/format";
 import { canAdmin } from "@/lib/roles";
 import { getCurrentUser } from "@/lib/session";
 import { findStaffForUser } from "@/lib/current-staff";
@@ -116,7 +116,7 @@ function OpportunitySection({ title, rows, emptyMessage }: { title: string; rows
                 <td><InterestBadge level={opportunity.interestLevel} /></td>
                 <td>{opportunity.statusDowngradeAt ? formatDisplayDate(opportunity.statusDowngradeAt) : "-"}</td>
                 <td>
-                  {opportunity.nextCrmTask ? <div className="grid gap-1"><span className="font-semibold">{opportunity.nextCrmTask.label}</span><span className="text-[var(--text-muted)]">Due {dateInputValue(opportunity.nextCrmTask.dueDate)}</span></div> : "-"}
+                  {opportunity.nextCrmTask ? <div className="grid gap-1"><span className="font-semibold">{opportunity.nextCrmTask.label}</span><span className="text-[var(--text-muted)]">Due {formatDisplayDate(opportunity.nextCrmTask.dueDate)}</span></div> : "-"}
                 </td>
               </tr>
             ))}

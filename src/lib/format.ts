@@ -42,7 +42,7 @@ export function dateInputValue(date: Date) {
 
 export function formatDisplayDate(date: Date) {
   const [year, month, day] = dateInputValue(date).split("-");
-  return `${day}/${month}/${year}`;
+  return `${month}/${day}/${year}`;
 }
 
 export function currentDateInputValue(date = new Date()) {
@@ -79,12 +79,12 @@ export function monthLabel(date = new Date()) {
 
 export function longDateLabel(date = new Date()) {
   const { year, month, day } = pacificParts(date);
-  return `${day}/${month}/${year}`;
+  return `${month}/${day}/${year}`;
 }
 
 export function formatDateTime(date: Date) {
   const { year, month, day, hour, minute } = pacificParts(date);
-  return `${day}/${month}/${year} ${hour}:${minute}`;
+  return `${month}/${day}/${year} ${hour}:${minute}`;
 }
 
 export function addCalendarDays(date: Date, days: number) {

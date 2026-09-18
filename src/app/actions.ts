@@ -1109,6 +1109,9 @@ export async function updateClientRecordAction(formData: FormData) {
   if (existingSale && !data.membershipSaleDate) {
     redirect(adminClientRedirect(data.clientId, `error=${encodeURIComponent("Membership sale date is required for a sold membership.")}`));
   }
+  if (existingSale && !data.membershipTypeId) {
+    redirect(adminClientRedirect(data.clientId, `error=${encodeURIComponent("Membership type is required for a sold membership.")}`));
+  }
   const membershipSaleDate = existingSale ? toLocalDate(data.membershipSaleDate!) : null;
   const supportCloserId = data.proposedSupportCloserId || null;
   const saleClosersChanged = Boolean(
@@ -1124,6 +1127,7 @@ export async function updateClientRecordAction(formData: FormData) {
       dateInputValue(existingSale.membershipSaleDate) !== dateInputValue(membershipSaleDate),
   );
   const firstVisitCredit = membershipSaleDate ? isFirstVisitSale(firstVisitDate, membershipSaleDate) : false;
+  const membershipTypeChanged = Boolean(existingSale && data.membershipTypeId && existingSale.membershipTypeId !== data.membershipTypeId);
   const lastFollowUpDate = optionalDate(data.lastFollowUpDate);
   const nextFollowUpDate = optionalDate(data.nextFollowUpDate);
   const interestChanged = existing.opportunity.interestLevel !== data.interestLevel;
@@ -1175,6 +1179,7 @@ export async function updateClientRecordAction(formData: FormData) {
         where: { id: existingSale.id },
         data: {
           locationId: data.locationId,
+          membershipTypeId: data.membershipTypeId!,
           membershipSaleDate,
           finalPrimaryCloserId: data.proposedPrimaryCloserId,
           finalSupportCloserId: supportCloserId,
@@ -1223,6 +1228,18 @@ export async function updateClientRecordAction(formData: FormData) {
             recordId: existingSale.id,
             previousValue: dateInputValue(existingSale.membershipSaleDate),
             newValue: dateInputValue(membershipSaleDate),
+          },
+        });
+      }
+      if (membershipTypeChanged) {
+        await tx.auditLog.create({
+          data: {
+            actingUser: role,
+            action: "MEMBERSHIP_TYPE_EDITED",
+            recordType: "MembershipSale",
+            recordId: existingSale.id,
+            previousValue: existingSale.membershipTypeId,
+            newValue: data.membershipTypeId!,
           },
         });
       }
