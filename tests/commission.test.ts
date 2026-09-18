@@ -447,6 +447,34 @@ describe("CRM account status lifecycle", () => {
     expect(task?.id).toBe("call");
     expect(dateInputValue(task!.dueDate)).toBe("2026-09-05");
   });
+
+  it("preserves legacy Personal SMS progress after the CRM-step upgrade", () => {
+    const steps = [
+      { id: "text", key: "initialTextMessage", label: "Initial Text Message", content: "Hello", communicationType: "SMS", delayDays: 1, applicableStatuses: "Hot,Warm", resultingStatus: null },
+      { id: "call", key: "initialVoiceScript", label: "Initial Voice Script", content: "", communicationType: "PHONE", delayDays: 2, applicableStatuses: "Hot,Warm", resultingStatus: null },
+    ];
+    const task = nextCrmTask({
+      interestLevel: "Hot",
+      statusSinceAt: toLocalDate("2026-09-01"),
+      followUpStatus: "Phone Outreach",
+      followUps: [{ crmStepId: null, status: "Personal SMS Completed", createdAt: toLocalDate("2026-09-03") }],
+    }, steps);
+
+    expect(task?.id).toBe("call");
+    expect(dateInputValue(task!.dueDate)).toBe("2026-09-05");
+  });
+
+  it("preserves legacy numbered follow-up progress", () => {
+    const steps = [
+      { id: "first", label: "Initial Text Message", content: "", communicationType: "SMS", delayDays: 1, applicableStatuses: "Hot", resultingStatus: null },
+      { id: "second", label: "Initial Voice Script", content: "", communicationType: "PHONE", delayDays: 2, applicableStatuses: "Hot", resultingStatus: null },
+      { id: "third", label: "Final Text Message", content: "", communicationType: "SMS", delayDays: 2, applicableStatuses: "Hot", resultingStatus: null },
+    ];
+
+    expect(nextCrmTask({ interestLevel: "Hot", statusSinceAt: toLocalDate("2026-09-01"), followUpStatus: "Need 2nd Followup", followUps: [] }, steps)?.id).toBe("second");
+    expect(nextCrmTask({ interestLevel: "Hot", statusSinceAt: toLocalDate("2026-09-01"), followUpStatus: "Need 3rd Followup", followUps: [] }, steps)?.id).toBe("third");
+    expect(nextCrmTask({ interestLevel: "Hot", statusSinceAt: toLocalDate("2026-09-01"), followUpStatus: "Completed", followUps: [] }, steps)).toBeNull();
+  });
 });
 
 describe("administrator client search", () => {

@@ -247,16 +247,61 @@ export async function getActiveCrmSteps() {
 }
 
 export function nextCrmTask(
-  opportunity: { interestLevel: string; statusSinceAt: Date; followUps: { crmStepId: string | null; createdAt: Date }[] },
-  steps: { id: string; label: string; content: string; communicationType: string; delayDays: number; applicableStatuses: string; resultingStatus: string | null }[],
+  opportunity: { interestLevel: string; statusSinceAt: Date; followUpStatus?: string | null; lastFollowUpDate?: Date | null; followUps: { crmStepId: string | null; status?: string; createdAt: Date }[] },
+  steps: { id: string; key?: string; label: string; content: string; communicationType: string; delayDays: number; applicableStatuses: string; resultingStatus: string | null }[],
 ) {
-  const completed = new Set(opportunity.followUps.map((followUp) => followUp.crmStepId).filter(Boolean));
   const applicable = steps.filter((step) => step.applicableStatuses.split(",").map((status) => status.trim()).includes(opportunity.interestLevel));
+  const completed = completedCrmStepIds(opportunity, applicable);
   const step = applicable.find((candidate) => !completed.has(candidate.id));
   if (!step) return null;
-  const previousCompletion = opportunity.followUps.find((followUp) => followUp.crmStepId && completed.has(followUp.crmStepId));
-  const dueDate = addCalendarDays(previousCompletion?.createdAt ?? opportunity.statusSinceAt, step.delayDays);
+  const previousCompletion = opportunity.followUps.find((followUp) => {
+    if (followUp.crmStepId) return completed.has(followUp.crmStepId);
+    return legacyStepId(followUp.status, applicable) !== null;
+  });
+  const dueDate = addCalendarDays(previousCompletion?.createdAt ?? opportunity.lastFollowUpDate ?? opportunity.statusSinceAt, step.delayDays);
   return { ...step, dueDate };
+}
+
+function completedCrmStepIds(
+  opportunity: { followUpStatus?: string | null; followUps: { crmStepId: string | null; status?: string }[] },
+  applicable: { id: string; key?: string; label: string }[],
+) {
+  const completed = new Set<string>();
+  for (const followUp of opportunity.followUps) {
+    if (followUp.crmStepId) completed.add(followUp.crmStepId);
+    else {
+      const inferredId = legacyStepId(followUp.status, applicable);
+      if (inferredId) completed.add(inferredId);
+    }
+  }
+
+  // Before CRM steps had identifiers, progress was stored only as the
+  // opportunity's next-action label. Preserve that progress during rollout.
+  const legacyStage = normalizeCrmLabel(opportunity.followUpStatus);
+  const completedCount = legacyStage === "phoneoutreach" || legacyStage === "personalsmscompleted" || legacyStage === "need2ndfollowup"
+    ? 1
+    : legacyStage === "need3rdfollowup"
+      ? 2
+      : ["completed", "rejected", "movetocold"].includes(legacyStage)
+        ? applicable.length
+        : 0;
+  applicable.slice(0, completedCount).forEach((step) => completed.add(step.id));
+  return completed;
+}
+
+function legacyStepId(status: string | undefined, steps: { id: string; key?: string; label: string }[]) {
+  const normalized = normalizeCrmLabel(status).replace(/completed$/, "");
+  if (!normalized) return null;
+  const direct = steps.find((step) => normalizeCrmLabel(step.label) === normalized);
+  if (direct) return direct.id;
+  if (normalized === "personalsms") {
+    return steps.find((step) => step.key === "initialTextMessage" || normalizeCrmLabel(step.label) === "initialtextmessage")?.id ?? null;
+  }
+  return null;
+}
+
+function normalizeCrmLabel(value?: string | null) {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export async function getSpecialSpiffEntryOptions() {
